@@ -265,6 +265,7 @@ void onMouseHandle(int event, int x, int y, int flags, void *param)
 	}
 }
 
+//publish tranform from map to odom . 
 tf::Transform getmap2odom(const geometry_msgs::PoseStamped grid_pose)
 {
 	tf::Transform map2odom;
