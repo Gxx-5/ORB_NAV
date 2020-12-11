@@ -1,0 +1,2 @@
+- setup-file:
+    local-name: /home/gxx/WorkSpace/ORB_SLAM2_grid_navigation-master/Examples/ROS/tf_ws/devel/setup.sh

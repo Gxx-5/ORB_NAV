@@ -1,0 +1,19 @@
+<launch>
+  <arg name="ORB_bin" default="$(find ORB_SLAM2)/Vocabulary/ORBvoc.bin"/>
+  <arg name="ORB_yaml" default="$(find ORB_SLAM2)/Vocabulary/kinect507.yaml"/>
+  <arg name="rgb" value="/camera/rgb/image_raw"/>
+  <arg name="depth" value="/camera/depth_registered/image_raw"/>
+    
+  <node name="static_transform_publisher" pkg="tf" type="static_transform_publisher" args="0 0 0 0 0 0 /map /odom 1" output="screen"/>
+
+  <node name="RGBDpub" pkg="ORB_SLAM2"
+      type="RGBDpub" args = "$(arg ORB_bin) $(arg ORB_yaml)" output="screen">
+    <remap from="/camera/rgb/image_raw" to="$(arg rgb)"/>  
+    <remap from="/camera/depth_registered/image_raw" to="$(arg depth)"/>  
+  </node>
+
+  <node name="VRobot" pkg="ORB_SLAM2"
+      type="VRobot" args= "150 1 1 -3 3 -2 0.55 0.50 1 5" output="screen">
+  </node>
+
+</launch>
