@@ -43,6 +43,7 @@ namespace ORB_SLAM2
 		const bool bUseViewer) :mSensor(sensor), mpViewer(static_cast<Viewer*>(NULL)), mbReset(false), mbActivateLocalizationMode(false),
 		mbDeactivateLocalizationMode(false)
 	{
+		bool if_simplified = true;
 		// Output welcome message
 		cout << endl <<
 			"ORB-SLAM2 Copyright (C) 2014-2016 Raul Mur-Artal, University of Zaragoza." << endl <<
@@ -71,99 +72,102 @@ namespace ORB_SLAM2
 		//Load ORB Vocabulary
 		cout << endl << "Loading ORB Vocabulary. This could take a while..." << endl;
 
-	    mpVocabulary = new ORBVocabulary();
-	    bool bVocLoad = false; // chose loading method based on file extension
+		mpVocabulary = new ORBVocabulary();
+		bool bVocLoad = false; // chose loading method based on file extension
 
-	    if (has_suffix(strVocFile, ".bin")){
-	        cout << "loadFromBinaryFile......" << endl;
-	        bVocLoad = mpVocabulary->loadFromBinaryFile(strVocFile);
-	    }
-	    else if(has_suffix(strVocFile, ".txt")){
-	        cout << "loadFromTextFile......" << endl;
-	        bVocLoad = mpVocabulary->loadFromTextFile(strVocFile);
-	    }
-	    else{
-	        bVocLoad = false;
-	    }
-	    // bool bVocLoad = mpVocabulary->loadFromTextFile(strVocFile);
-		if (!bVocLoad)
-		{
-			cerr << "Wrong path to vocabulary. " << endl;
-			cerr << "Falied to open at: " << strVocFile << endl;
-			exit(-1);
+		if (has_suffix(strVocFile, ".bin")){
+			cout << "loadFromBinaryFile......" << endl;
+			bVocLoad = mpVocabulary->loadFromBinaryFile(strVocFile);
 		}
-		cout << "Vocabulary loaded!" << endl << endl;
+		else if(has_suffix(strVocFile, ".txt")){
+			cout << "loadFromTextFile......" << endl;
+			bVocLoad = mpVocabulary->loadFromTextFile(strVocFile);
+		}
+		else{
+			bVocLoad = false;
+		}
+		// bool bVocLoad = mpVocabulary->loadFromTextFile(strVocFile);
+			if (!bVocLoad)
+			{
+				cerr << "Wrong path to vocabulary. " << endl;
+				cerr << "Falied to open at: " << strVocFile << endl;
+				exit(-1);
+			}
+			cout << "Vocabulary loaded!" << endl << endl;
 
-		//Create KeyFrame Database
-		mpKeyFrameDatabase = new KeyFrameDatabase(*mpVocabulary);
+			//Create KeyFrame Database
+			mpKeyFrameDatabase = new KeyFrameDatabase(*mpVocabulary);
 
-		//Create the Map
-		mpMap = new Map();
+			//Create the Map
+			mpMap = new Map();
 
-		//Create Drawers. These are used by the Viewer
-		mpFrameDrawer = new FrameDrawer(mpMap);
-		mpMapDrawer = new MapDrawer(mpMap, strSettingsFile);
+			//Create Drawers. These are used by the Viewer
+			mpFrameDrawer = new FrameDrawer(mpMap);
+			mpMapDrawer = new MapDrawer(mpMap, strSettingsFile);
 
-		//Initialize the Tracking thread
-		//(it will live in the main thread of execution, the one that called this constructor)
-		mpTracker = new Tracking(this, mpVocabulary, mpFrameDrawer, mpMapDrawer,
-			mpMap, mpKeyFrameDatabase, strSettingsFile, mSensor);
+			//Initialize the Tracking thread
+			//(it will live in the main thread of execution, the one that called this constructor)
+			mpTracker = new Tracking(this, mpVocabulary, mpFrameDrawer, mpMapDrawer,
+				mpMap, mpKeyFrameDatabase, strSettingsFile, mSensor);
 
-		//Initialize the Local Mapping thread and launch
-		mpLocalMapper = new LocalMapping(mpMap, mSensor == MONOCULAR);
-		mptLocalMapping = new thread(&ORB_SLAM2::LocalMapping::Run, mpLocalMapper);
+			//Initialize the Local Mapping thread and launch
+			mpLocalMapper = new LocalMapping(mpMap, mSensor == MONOCULAR);
+			mptLocalMapping = new thread(&ORB_SLAM2::LocalMapping::Run, mpLocalMapper);
 
-		//Initialize the Loop Closing thread and launch
-		mpLoopCloser = new LoopClosing(mpMap, mpKeyFrameDatabase, mpVocabulary, mSensor != MONOCULAR);
-		mptLoopClosing = new thread(&ORB_SLAM2::LoopClosing::Run, mpLoopCloser);
+			//Initialize the Loop Closing thread and launch
+			mpLoopCloser = new LoopClosing(mpMap, mpKeyFrameDatabase, mpVocabulary, mSensor != MONOCULAR);
+			mptLoopClosing = new thread(&ORB_SLAM2::LoopClosing::Run, mpLoopCloser);
 
-		//Initialize the Viewer thread and launch
-		if (bUseViewer)
-		{
-			mpViewer = new Viewer(this, mpFrameDrawer, mpMapDrawer, mpTracker, strSettingsFile);
-			mptViewer = new thread(&Viewer::Run, mpViewer);
-			mpTracker->SetViewer(mpViewer);
+			//Initialize the Viewer thread and launch
+			if (bUseViewer)
+			{
+				mpViewer = new Viewer(this, mpFrameDrawer, mpMapDrawer, mpTracker, strSettingsFile);
+				mptViewer = new thread(&Viewer::Run, mpViewer);
+				mpTracker->SetViewer(mpViewer);
+			}
+
+		// Choose to use pure localization mode
+		if (!if_simplified){
+			char IsPureLocalization;
+			cout << "Do you want to run pure localization?(y/n)" << endl;
+			cin >> IsPureLocalization;
+			if(IsPureLocalization == 'Y' || IsPureLocalization == 'y'){  
+				ActivateLocalizationMode();
+			}
 		}
 
-	    // Choose to use pure localization mode
-	    char IsPureLocalization;
-	    cout << "Do you want to run pure localization?(y/n)" << endl;
-	    cin >> IsPureLocalization;
-	    if(IsPureLocalization == 'Y' || IsPureLocalization == 'y'){  
-	        ActivateLocalizationMode();
-	    }
+		//Load map
+		char IsLoadMap;
 
-	    //Load map
-	    char IsLoadMap;
+		//get the current absoulte path  
+		std::string cwd = getcwd(NULL, 0);
+		cout << "The current dir is : " << cwd << endl; 
+		string strPathSystemSetting = cwd + "/" + strSettingsFile.c_str();
 
-	    //get the current absoulte path  
-	    std::string cwd = getcwd(NULL, 0);
-	    cout << "The current dir is : " << cwd << endl; 
-	    string strPathSystemSetting = cwd + "/" + strSettingsFile.c_str();
+		cout << "Your setting file path is : " << strPathSystemSetting << endl; 
 
-	    cout << "Your setting file path is : " << strPathSystemSetting << endl; 
-    
-	    string strPathMap = cwd + "/MapPointandKeyFrame.bin";
-	    cout << "Your map file path would be : " << strPathMap << endl; 
+		if (!if_simplified){
+			string strPathMap = cwd + "/MapPointandKeyFrame.bin";
+			cout << "Your map file path would be : " << strPathMap << endl; 
+			cout << "Do you want to load the map?(y/n)" << endl;  
+			cin >> IsLoadMap;
+			SystemSetting *mySystemSetting = new SystemSetting(mpVocabulary);  
+			mySystemSetting->LoadSystemSetting(strPathSystemSetting);
+			// mySystemSetting->LoadSystemSetting("/home/boom/MY_ORB_SLAM2/ORB_SLAM2/Examples/Stereo/KITTI04-12.yaml");
+			if(IsLoadMap == 'Y' || IsLoadMap == 'y'){  
+				mpMap->Load(strPathMap, mySystemSetting, mpKeyFrameDatabase);
+			}
+		}
+			//Set pointers between threads
+			mpTracker->SetLocalMapper(mpLocalMapper);
+			mpTracker->SetLoopClosing(mpLoopCloser);
 
-	    cout << "Do you want to load the map?(y/n)" << endl;  
-	    cin >> IsLoadMap;
-	    SystemSetting *mySystemSetting = new SystemSetting(mpVocabulary);  
-	    mySystemSetting->LoadSystemSetting(strPathSystemSetting);
-	    // mySystemSetting->LoadSystemSetting("/home/boom/MY_ORB_SLAM2/ORB_SLAM2/Examples/Stereo/KITTI04-12.yaml");
-	    if(IsLoadMap == 'Y' || IsLoadMap == 'y'){  
-	        mpMap->Load(strPathMap, mySystemSetting, mpKeyFrameDatabase);
-	    }
-		//Set pointers between threads
-		mpTracker->SetLocalMapper(mpLocalMapper);
-		mpTracker->SetLoopClosing(mpLoopCloser);
+			mpLocalMapper->SetTracker(mpTracker);
+			mpLocalMapper->SetLoopCloser(mpLoopCloser);
 
-		mpLocalMapper->SetTracker(mpTracker);
-		mpLocalMapper->SetLoopCloser(mpLoopCloser);
-
-		mpLoopCloser->SetTracker(mpTracker);
-		mpLoopCloser->SetLocalMapper(mpLocalMapper);
-	}
+			mpLoopCloser->SetTracker(mpTracker);
+			mpLoopCloser->SetLocalMapper(mpLocalMapper);
+		}
 
 	cv::Mat System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timestamp)
 	{
