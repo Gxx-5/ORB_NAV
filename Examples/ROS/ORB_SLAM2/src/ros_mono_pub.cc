@@ -45,7 +45,7 @@
 #include <Converter.h>
 
 //! parameters
-bool read_from_topic = false, read_from_camera = false;
+bool read_from_topic = true, read_from_camera = false;
 //Publish
 ros::Publisher pub_cloud;
 bool save_to_results = false;
@@ -98,7 +98,8 @@ int main(int argc, char **argv){
 	pub_cloud = nodeHandler.advertise<sensor_msgs::PointCloud2>("cloud_in", 1000);
 	ros::Publisher pub_pts_and_pose = nodeHandler.advertise<geometry_msgs::PoseArray>("pts_and_pose", 1000);
 	ros::Publisher pub_all_kf_and_pts = nodeHandler.advertise<geometry_msgs::PoseArray>("all_kf_and_pts", 1000);
-	ros::Publisher pub_cur_camera_pose = nodeHandler.advertise<geometry_msgs::Pose>("/cur_camera_pose", 1000);
+	// ros::Publisher pub_cur_camera_pose = nodeHandler.advertise<geometry_msgs::Pose>("/cur_camera_pose", 1000);
+	 ros::Publisher pub_cur_camera_pose = nodeHandler.advertise<geometry_msgs::PoseStamped>("/cur_camera_pose", 1000);
 	if (read_from_topic) {
 		ImageGrabber igb(SLAM, pub_pts_and_pose, pub_all_kf_and_pts, pub_cur_camera_pose);
 		ros::Subscriber sub = nodeHandler.subscribe(image_topic, 1, &ImageGrabber::GrabImage, &igb);
@@ -233,8 +234,8 @@ void publish(ORB_SLAM2::System &SLAM, ros::Publisher &pub_pts_and_pose,
 		geometry_msgs::Pose n_kf_msg;
 		n_kf_msg.position.x = n_kf_msg.position.y = n_kf_msg.position.z = n_kf;
 		kf_pt_array.poses[0] = n_kf_msg;
-		kf_pt_array.header.frame_id = "1";
-		kf_pt_array.header.seq = frame_id + 1;
+		kf_pt_array.header.frame_id = "map";
+		// kf_pt_array.header.seq = frame_id + 1;
 		printf("Publishing data for %u keyfranmes\n", n_kf);
 		pub_all_kf_and_pts.publish(kf_pt_array);
 	}
@@ -347,8 +348,12 @@ void publish(ORB_SLAM2::System &SLAM, ros::Publisher &pub_pts_and_pose,
 		camera_pose.orientation.y = q[1];
 		camera_pose.orientation.z = q[2];
 		camera_pose.orientation.w = q[3];
-
-		pub_cur_camera_pose.publish(camera_pose);
+		
+		geometry_msgs::PoseStamped camera_poseStamped;
+		camera_poseStamped.pose = camera_pose;
+		camera_poseStamped.header.frame_id = "map";
+		camera_poseStamped.header.stamp = ros::Time::now();
+		pub_cur_camera_pose.publish(camera_poseStamped);
 	}
 }
 
