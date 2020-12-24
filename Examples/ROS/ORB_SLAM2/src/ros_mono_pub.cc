@@ -46,9 +46,11 @@
 
 //! parameters
 bool read_from_topic = true, read_from_camera = false;
+double nearbyradius = 1.0;
 //Publish
 ros::Publisher pub_cloud;
 ros::Publisher pub_map_cloud;
+ros::Publisher pub_nearby_map_cloud;
 bool save_to_results = false;
 std::string image_topic = "/camera/image_raw";
 int all_pts_pub_gap = 0;
@@ -98,6 +100,7 @@ int main(int argc, char **argv){
 	ros::NodeHandle nodeHandler;
 	pub_cloud = nodeHandler.advertise<sensor_msgs::PointCloud2>("cloud_in", 1000);
 	pub_map_cloud = nodeHandler.advertise<sensor_msgs::PointCloud2>("map_cloud", 1000);
+	pub_nearby_map_cloud = nodeHandler.advertise<sensor_msgs::PointCloud2>("nearby_map_cloud", 1000);
 	ros::Publisher pub_pts_and_pose = nodeHandler.advertise<geometry_msgs::PoseArray>("pts_and_pose", 1000);
 	ros::Publisher pub_all_kf_and_pts = nodeHandler.advertise<geometry_msgs::PoseArray>("all_kf_and_pts", 1000);
 	// ros::Publisher pub_cur_camera_pose = nodeHandler.advertise<geometry_msgs::Pose>("/cur_camera_pose", 1000);
@@ -241,6 +244,7 @@ void publish(ORB_SLAM2::System &SLAM, ros::Publisher &pub_pts_and_pose,
 		// kf_pt_array.header.seq = frame_id + 1;
 		printf("Publishing data for %u keyfranmes\n", n_kf);
 		pub_all_kf_and_pts.publish(kf_pt_array);
+		SLAM.getMap()->ResetNearbyPoint();//when loop closure detected,reset nearbypoints to map points(all)
 	}
 	else if (SLAM.getTracker()->mCurrentFrame.is_keyframe) {
 		++pub_count;
@@ -271,13 +275,13 @@ void publish(ORB_SLAM2::System &SLAM, ros::Publisher &pub_pts_and_pose,
 
 		vector<float> q = ORB_SLAM2::Converter::toQuaternion(Rwc);
 		//geometry_msgs::Pose camera_pose;
-		std::vector<ORB_SLAM2::MapPoint*> all_map_points = SLAM.getMap()->GetAllMapPoints();
+		// std::vector<ORB_SLAM2::MapPoint*> all_map_points = SLAM.getMap()->GetAllMapPoints();
 		std::vector<ORB_SLAM2::MapPoint*> map_points = SLAM.GetTrackedMapPoints();
 		int n_map_pts = map_points.size();
-		int all_map_pts = all_map_points.size();
+		// int all_map_pts = all_map_points.size();
 
 		printf("\ntracked_map_pts: %d\n", n_map_pts);
-		printf("all_map_pts: %d\n", all_map_pts);
+		// printf("all_map_pts: %d\n", all_map_pts);
 
 		pcl::PointCloud<pcl::PointXYZ>::Ptr pcl_cloud(new pcl::PointCloud<pcl::PointXYZ>);
 
@@ -334,31 +338,6 @@ void publish(ORB_SLAM2::System &SLAM, ros::Publisher &pub_pts_and_pose,
 		pt_array.header.seq = frame_id + 1;
 		pub_pts_and_pose.publish(pt_array);
 		// pub_kf.publish(camera_pose);
-
-		// Publish all map points 
-		pcl::PointCloud<pcl::PointXYZ>::Ptr map_cloud(new pcl::PointCloud<pcl::PointXYZ>);
-		for (int pt_id = 1; pt_id <= all_map_pts; ++pt_id){
-			if (!all_map_points[pt_id - 1] || all_map_points[pt_id - 1]->isBad()) {
-				printf("Point %d is bad\n", pt_id);
-				continue;
-			}
-			cv::Mat wp = all_map_points[pt_id - 1]->GetWorldPos();
-
-			if (wp.empty()) {
-				printf("World position for point %d is empty\n", pt_id);
-				continue;
-			}
-			// geometry_msgs::Pose curr_pt;
-			//printf("wp size: %d, %d\n", wp.rows, wp.cols);
-			// cout << wp.at<float>(0)<< wp.at<float>(1)<< wp.at<float>(2)<<endl;
-			// cout << pt_id << all_map_pts << endl;
-			map_cloud->push_back(pcl::PointXYZ(wp.at<float>(0), wp.at<float>(1), wp.at<float>(2)));
-			//printf("Done getting map point %d\n", pt_id);
-		}
-		sensor_msgs::PointCloud2 ros_map_cloud;
-		pcl::toROSMsg(*map_cloud, ros_map_cloud);
-		ros_map_cloud.header.frame_id = "map";
-		pub_map_cloud.publish(ros_map_cloud);
 	}
 	// Publish current camera pose
 	if (!SLAM.getTracker()->mCurrentFrame.mTcw.empty())
@@ -385,7 +364,64 @@ void publish(ORB_SLAM2::System &SLAM, ros::Publisher &pub_pts_and_pose,
 		camera_poseStamped.header.frame_id = "map";
 		camera_poseStamped.header.stamp = ros::Time::now();
 		pub_cur_camera_pose.publish(camera_poseStamped);
+		//Modify Map points nearby camear by the way
+		ModifyNearbyPoint(SLAM.getMap(),std::vector<float>{twc.at<float>(0),twc.at<float>(1),twc.at<float>(2)});
 	}
+	//Publish all map points
+	std::vector<ORB_SLAM2::MapPoint*> all_map_points = SLAM.getMap()->GetAllMapPoints();
+	PublishMapPointstoCloud(all_map_points,pub_map_cloud);
+	//Publish nearby map points
+	std::vector<ORB_SLAM2::MapPoint*> nearby_points = SLAM.getMap()->GetNearbyMapPoints();
+	PublishMapPointstoCloud(nearby_points,pub_nearby_map_cloud);
+}
+
+void ModifyNearbyPoint(ORB_SLAM2::Map* map,std::vector<float> CamPos){
+	std::vector<ORB_SLAM2::MapPoint*> nearby_points = map->GetNearbyMapPoints();
+	int num_pts = nearby_points.size();
+	for (int pt_id = 1; pt_id <= num_pts; ++pt_id){
+		if (!nearby_points[pt_id - 1] || nearby_points[pt_id - 1]->isBad()) {
+			// printf("Point %d is bad\n", pt_id);
+			continue;
+		}
+		cv::Mat wp = nearby_points[pt_id - 1]->GetWorldPos();
+
+		if (wp.empty()) {
+			// printf("World position for point %d is empty\n", pt_id);
+			continue;
+		}
+		double dst = sqrt(pow((wp.at<float>(0)-CamPos[0]),2)+pow((wp.at<float>(1)-CamPos[1]),2)+pow((wp.at<float>(2)-CamPos[2]),2));
+		if(dst>nearbyradius){
+			map->EraseNearbyMapPoint(nearby_points[pt_id]);
+		}
+	}
+}
+
+void PublishMapPointstoCloud(std::vector<ORB_SLAM2::MapPoint*> points,ros::Publisher publisher){
+	int all_map_pts = points.size();
+	// Publish all map points 
+	pcl::PointCloud<pcl::PointXYZ>::Ptr map_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+	for (int pt_id = 1; pt_id <= all_map_pts; ++pt_id){
+		if (!points[pt_id - 1] || points[pt_id - 1]->isBad()) {
+			printf("Point %d is bad\n", pt_id);
+			continue;
+		}
+		cv::Mat wp = points[pt_id - 1]->GetWorldPos();
+
+		if (wp.empty()) {
+			printf("World position for point %d is empty\n", pt_id);
+			continue;
+		}
+		// geometry_msgs::Pose curr_pt;
+		//printf("wp size: %d, %d\n", wp.rows, wp.cols);
+		// cout << wp.at<float>(0)<< wp.at<float>(1)<< wp.at<float>(2)<<endl;
+		// cout << pt_id << all_map_pts << endl;
+		map_cloud->push_back(pcl::PointXYZ(wp.at<float>(0), wp.at<float>(1), wp.at<float>(2)));
+		//printf("Done getting map point %d\n", pt_id);
+	}
+	sensor_msgs::PointCloud2 ros_map_cloud;
+	pcl::toROSMsg(*map_cloud, ros_map_cloud);
+	ros_map_cloud.header.frame_id = "map";
+	publisher.publish(ros_map_cloud);
 }
 
 inline bool isInteger(const std::string & s){

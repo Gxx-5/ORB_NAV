@@ -32,3 +32,6 @@ CameraTrajectory.txt
 /runspace/other/
 /runspace/results/
 
+Examples/ROS/ORB_SLAM2/.vscode/
+.gitignore
+.vscode/

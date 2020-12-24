@@ -59,14 +59,18 @@ public:
     void AddKeyFrame(KeyFrame* pKF);
     void AddMapPoint(MapPoint* pMP);
     void EraseMapPoint(MapPoint* pMP);
+    void EraseNearbyMapPoint(MapPoint* pMP);    
     void EraseKeyFrame(KeyFrame* pKF);
     void SetReferenceMapPoints(const std::vector<MapPoint*> &vpMPs);
     void InformNewBigChange();
     int GetLastBigChangeIdx();
+    void ResetNearbyPoint();
+    void ModifyNearbyPoint(std::vector<float> CamPos);
 
     std::vector<KeyFrame*> GetAllKeyFrames();
     std::vector<MapPoint*> GetAllMapPoints();
     std::vector<MapPoint*> GetReferenceMapPoints();
+    std::vector<MapPoint*> GetNearbyMapPoints();
 
     long unsigned int MapPointsInMap();
     long unsigned  KeyFramesInMap();
@@ -76,7 +80,7 @@ public:
     void clear();
 
     vector<KeyFrame*> mvpKeyFrameOrigins;
-
+    std::set<MapPoint*> nearbyMapPoints; // map points nearby camera
     std::mutex mMutexMapUpdate;
 
     // This avoid that two points are created simultaneously in separate threads (id conflict)

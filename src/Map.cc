@@ -41,15 +41,23 @@ void Map::AddMapPoint(MapPoint *pMP)
 {
     unique_lock<mutex> lock(mMutexMap);
     mspMapPoints.insert(pMP);
+    nearbyMapPoints.insert(pMP);
 }
 
 void Map::EraseMapPoint(MapPoint *pMP)
 {
     unique_lock<mutex> lock(mMutexMap);
     mspMapPoints.erase(pMP);
+    nearbyMapPoints.erase(pMP);
 
     // TODO: This only erase the pointer.
     // Delete the MapPoint
+}
+
+void Map::EraseNearbyMapPoint(MapPoint *pMP)
+{
+    unique_lock<mutex> lock(mMutexMap);
+    nearbyMapPoints.erase(pMP);
 }
 
 void Map::EraseKeyFrame(KeyFrame *pKF)
@@ -91,6 +99,17 @@ vector<MapPoint*> Map::GetAllMapPoints()
     return vector<MapPoint*>(mspMapPoints.begin(), mspMapPoints.end());
 }
 
+vector<MapPoint*> Map::GetNearbyMapPoints()
+{
+    unique_lock<mutex> lock(mMutexMap);
+    return vector<MapPoint*>(nearbyMapPoints.begin(), nearbyMapPoints.end());
+}
+
+void Map::ResetNearbyPoint(){
+    unique_lock<mutex> lock(mMutexMap);
+    nearbyMapPoints = mspMapPoints;
+}
+
 long unsigned int Map::MapPointsInMap()
 {
     unique_lock<mutex> lock(mMutexMap);
@@ -124,6 +143,7 @@ void Map::clear()
         delete *sit;
 
     mspMapPoints.clear();
+    nearbyMapPoints.clear();
     mspKeyFrames.clear();
     mnMaxKFid = 0;
     mvpReferenceMapPoints.clear();
