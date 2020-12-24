@@ -278,7 +278,7 @@ void Tracking::Track()
     // Get Map Mutex -> Map cannot be changed
     unique_lock<mutex> lock(mpMap->mMutexMapUpdate);
 
-    cout << endl;
+    // cout << endl;
     
     // Different operation, according to whether the map is updated
     // bool bMapUpdated = false;

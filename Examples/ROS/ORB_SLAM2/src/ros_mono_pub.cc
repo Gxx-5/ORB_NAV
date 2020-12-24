@@ -48,6 +48,7 @@
 bool read_from_topic = true, read_from_camera = false;
 //Publish
 ros::Publisher pub_cloud;
+ros::Publisher pub_map_cloud;
 bool save_to_results = false;
 std::string image_topic = "/camera/image_raw";
 int all_pts_pub_gap = 0;
@@ -96,6 +97,7 @@ int main(int argc, char **argv){
 	ORB_SLAM2::System SLAM(argv[1], argv[2], ORB_SLAM2::System::MONOCULAR, true);
 	ros::NodeHandle nodeHandler;
 	pub_cloud = nodeHandler.advertise<sensor_msgs::PointCloud2>("cloud_in", 1000);
+	pub_map_cloud = nodeHandler.advertise<sensor_msgs::PointCloud2>("map_cloud", 1000);
 	ros::Publisher pub_pts_and_pose = nodeHandler.advertise<geometry_msgs::PoseArray>("pts_and_pose", 1000);
 	ros::Publisher pub_all_kf_and_pts = nodeHandler.advertise<geometry_msgs::PoseArray>("all_kf_and_pts", 1000);
 	// ros::Publisher pub_cur_camera_pose = nodeHandler.advertise<geometry_msgs::Pose>("/cur_camera_pose", 1000);
@@ -174,6 +176,7 @@ void publish(ORB_SLAM2::System &SLAM, ros::Publisher &pub_pts_and_pose,
 		pub_all_pts = true;
 		pub_count = 0;
 	}
+
 	if (pub_all_pts || SLAM.getLoopClosing()->loop_detected || SLAM.getTracker()->loop_detected) {
 		pub_all_pts = SLAM.getTracker()->loop_detected = SLAM.getLoopClosing()->loop_detected = false;
 		geometry_msgs::PoseArray kf_pt_array;
@@ -268,11 +271,13 @@ void publish(ORB_SLAM2::System &SLAM, ros::Publisher &pub_pts_and_pose,
 
 		vector<float> q = ORB_SLAM2::Converter::toQuaternion(Rwc);
 		//geometry_msgs::Pose camera_pose;
-		//std::vector<ORB_SLAM2::MapPoint*> map_points = SLAM.getMap()->GetAllMapPoints();
+		std::vector<ORB_SLAM2::MapPoint*> all_map_points = SLAM.getMap()->GetAllMapPoints();
 		std::vector<ORB_SLAM2::MapPoint*> map_points = SLAM.GetTrackedMapPoints();
 		int n_map_pts = map_points.size();
+		int all_map_pts = all_map_points.size();
 
-		//printf("n_map_pts: %d\n", n_map_pts);
+		printf("\ntracked_map_pts: %d\n", n_map_pts);
+		printf("all_map_pts: %d\n", all_map_pts);
 
 		pcl::PointCloud<pcl::PointXYZ>::Ptr pcl_cloud(new pcl::PointCloud<pcl::PointXYZ>);
 
@@ -315,19 +320,45 @@ void publish(ORB_SLAM2::System &SLAM, ros::Publisher &pub_pts_and_pose,
 			pt_array.poses.push_back(curr_pt);
 			//printf("Done getting map point %d\n", pt_id);
 		}
+
 		sensor_msgs::PointCloud2 ros_cloud;
 		pcl::toROSMsg(*pcl_cloud, ros_cloud);
 		ros_cloud.header.frame_id = "map";
 		// ros_cloud.header.seq = ni;
 
-		printf("valid map pts: %lu\n", pt_array.poses.size()-1);
-
+		printf("valid map pts: %lu\n", pt_array.poses.size()-1);				
 		printf("ros_cloud size: %d x %d\n", ros_cloud.height, ros_cloud.width);
 		pub_cloud.publish(ros_cloud);
+
 		pt_array.header.frame_id = "map";
 		pt_array.header.seq = frame_id + 1;
 		pub_pts_and_pose.publish(pt_array);
 		// pub_kf.publish(camera_pose);
+
+		// Publish all map points 
+		pcl::PointCloud<pcl::PointXYZ>::Ptr map_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+		for (int pt_id = 1; pt_id <= all_map_pts; ++pt_id){
+			if (!all_map_points[pt_id - 1] || all_map_points[pt_id - 1]->isBad()) {
+				printf("Point %d is bad\n", pt_id);
+				continue;
+			}
+			cv::Mat wp = all_map_points[pt_id - 1]->GetWorldPos();
+
+			if (wp.empty()) {
+				printf("World position for point %d is empty\n", pt_id);
+				continue;
+			}
+			// geometry_msgs::Pose curr_pt;
+			//printf("wp size: %d, %d\n", wp.rows, wp.cols);
+			// cout << wp.at<float>(0)<< wp.at<float>(1)<< wp.at<float>(2)<<endl;
+			// cout << pt_id << all_map_pts << endl;
+			map_cloud->push_back(pcl::PointXYZ(wp.at<float>(0), wp.at<float>(1), wp.at<float>(2)));
+			//printf("Done getting map point %d\n", pt_id);
+		}
+		sensor_msgs::PointCloud2 ros_map_cloud;
+		pcl::toROSMsg(*map_cloud, ros_map_cloud);
+		ros_map_cloud.header.frame_id = "map";
+		pub_map_cloud.publish(ros_map_cloud);
 	}
 	// Publish current camera pose
 	if (!SLAM.getTracker()->mCurrentFrame.mTcw.empty())

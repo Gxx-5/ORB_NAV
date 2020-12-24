@@ -1348,7 +1348,7 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
     const bool bForward = tlc.at<float>(2)>CurrentFrame.mb && !bMono;
     const bool bBackward = -tlc.at<float>(2)>CurrentFrame.mb && !bMono;
 
-    cout << "ORBmatcher::SearchByProjection() : There are " << LastFrame.N << " keypoints in the last frame, and ";
+    // cout << "ORBmatcher::SearchByProjection() : There are " << LastFrame.N << " keypoints in the last frame, and ";
     int nInlier=0; // For debug use
     int nNegativeDepth=0; // For debug use
     int nOutOfSeen=0; // For debug use
@@ -1460,7 +1460,7 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
             }
         }
     }
-    cout << nInlier << " of which are inliers, " << nNegativeDepth << " of which have negative depth; "<< nOutOfSeen++ << " of which are out of seen; " << nmatches << " of the seen points are pre-matches(<=TH_HIGH)." << endl; // For debug use
+    // cout << nInlier << " of which are inliers, " << nNegativeDepth << " of which have negative depth; "<< nOutOfSeen++ << " of which are out of seen; " << nmatches << " of the seen points are pre-matches(<=TH_HIGH)." << endl; // For debug use
 
     //Apply rotation consistency
     if(mbCheckOrientation)
