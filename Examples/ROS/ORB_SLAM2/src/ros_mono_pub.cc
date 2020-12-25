@@ -30,6 +30,8 @@
 #include "sensor_msgs/PointCloud2.h"
 #include "geometry_msgs/PoseStamped.h"
 #include "geometry_msgs/PoseArray.h"
+#include "visualization_msgs/MarkerArray.h"
+#include "visualization_msgs/Marker.h"
 
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
@@ -43,6 +45,7 @@
 #include <opencv2/highgui/highgui_c.h>
 #include <opencv2/highgui/highgui.hpp>
 #include <Converter.h>
+#include "costcube.h"
 
 //! parameters
 bool read_from_topic = true, read_from_camera = false;
@@ -51,6 +54,7 @@ double nearbyradius = 1.0;
 ros::Publisher pub_cloud;
 ros::Publisher pub_map_cloud;
 ros::Publisher pub_nearby_map_cloud;
+ros::Publisher vis_pub;
 bool save_to_results = false;
 std::string image_topic = "/camera/image_raw";
 int all_pts_pub_gap = 0;
@@ -61,6 +65,10 @@ cv::VideoCapture cap_obj;
 
 bool pub_all_pts = false;
 int pub_count = 0;
+int costcube_range = 1.0;
+int costcube_res = 0.05;
+cv::Mat costcube_map;
+CostCube costcube(costcube_range,costcube_res);
 
 void LoadImages(const string &strSequence, vector<string> &vstrImageFilenames,
 	vector<double> &vTimestamps);
@@ -101,6 +109,7 @@ int main(int argc, char **argv){
 	pub_cloud = nodeHandler.advertise<sensor_msgs::PointCloud2>("cloud_in", 1000);
 	pub_map_cloud = nodeHandler.advertise<sensor_msgs::PointCloud2>("map_cloud", 1000);
 	pub_nearby_map_cloud = nodeHandler.advertise<sensor_msgs::PointCloud2>("nearby_map_cloud", 1000);
+	vis_pub = nodeHandler.advertise<visualization_msgs::MarkerArray>("CostCube",1);
 	ros::Publisher pub_pts_and_pose = nodeHandler.advertise<geometry_msgs::PoseArray>("pts_and_pose", 1000);
 	ros::Publisher pub_all_kf_and_pts = nodeHandler.advertise<geometry_msgs::PoseArray>("all_kf_and_pts", 1000);
 	// ros::Publisher pub_cur_camera_pose = nodeHandler.advertise<geometry_msgs::Pose>("/cur_camera_pose", 1000);
@@ -340,6 +349,7 @@ void publish(ORB_SLAM2::System &SLAM, ros::Publisher &pub_pts_and_pose,
 		// pub_kf.publish(camera_pose);
 	}
 	// Publish current camera pose
+	geometry_msgs::Pose camera_pose;
 	if (!SLAM.getTracker()->mCurrentFrame.mTcw.empty())
 	{
 		cv::Mat Tcw = SLAM.getTracker()->mCurrentFrame.mTcw; 
@@ -347,9 +357,7 @@ void publish(ORB_SLAM2::System &SLAM, ros::Publisher &pub_pts_and_pose,
 		cv::Mat twc = -Rwc*Tcw.rowRange(0, 3).col(3);
 
 		vector<float> q = ORB_SLAM2::Converter::toQuaternion(Rwc);
-
-		geometry_msgs::Pose camera_pose;
-
+		
 		camera_pose.position.x = twc.at<float>(0);
 		camera_pose.position.y = twc.at<float>(1);
 		camera_pose.position.z = twc.at<float>(2);
@@ -372,7 +380,10 @@ void publish(ORB_SLAM2::System &SLAM, ros::Publisher &pub_pts_and_pose,
 	PublishMapPointstoCloud(all_map_points,pub_map_cloud);
 	//Publish nearby map points
 	std::vector<ORB_SLAM2::MapPoint*> nearby_points = SLAM.getMap()->GetNearbyMapPoints();
-	PublishMapPointstoCloud(nearby_points,pub_nearby_map_cloud);
+	vector<geometry_msgs::Point> nearby_points_pos;
+	PublishMapPointstoCloud(nearby_points,pub_nearby_map_cloud,&nearby_points_pos);
+	costcube_map = costcube.getCostCube(nearby_points_pos,camera_pose);
+	VisualizeCostCube(costcube_map);
 }
 
 void ModifyNearbyPoint(ORB_SLAM2::Map* map,std::vector<float> CamPos){
@@ -396,10 +407,12 @@ void ModifyNearbyPoint(ORB_SLAM2::Map* map,std::vector<float> CamPos){
 	}
 }
 
-void PublishMapPointstoCloud(std::vector<ORB_SLAM2::MapPoint*> points,ros::Publisher publisher){
+void PublishMapPointstoCloud(std::vector<ORB_SLAM2::MapPoint*> points,ros::Publisher publisher,
+								vector<geometry_msgs::Point>* points_pos = NULL){
 	int all_map_pts = points.size();
 	// Publish all map points 
-	pcl::PointCloud<pcl::PointXYZ>::Ptr map_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr map_cloud(new pcl::PointCloud<pcl::PointXYZ>);	
+	
 	for (int pt_id = 1; pt_id <= all_map_pts; ++pt_id){
 		if (!points[pt_id - 1] || points[pt_id - 1]->isBad()) {
 			printf("Point %d is bad\n", pt_id);
@@ -411,10 +424,13 @@ void PublishMapPointstoCloud(std::vector<ORB_SLAM2::MapPoint*> points,ros::Publi
 			printf("World position for point %d is empty\n", pt_id);
 			continue;
 		}
-		// geometry_msgs::Pose curr_pt;
-		//printf("wp size: %d, %d\n", wp.rows, wp.cols);
-		// cout << wp.at<float>(0)<< wp.at<float>(1)<< wp.at<float>(2)<<endl;
-		// cout << pt_id << all_map_pts << endl;
+		if(points_pos){
+			geometry_msgs::Point pt_pos;
+			pt_pos.x = wp.at<float>(0);
+			pt_pos.y = wp.at<float>(1);
+			pt_pos.z = wp.at<float>(2);
+			points_pos->push_back(pt_pos);
+		}
 		map_cloud->push_back(pcl::PointXYZ(wp.at<float>(0), wp.at<float>(1), wp.at<float>(2)));
 		//printf("Done getting map point %d\n", pt_id);
 	}
@@ -422,6 +438,44 @@ void PublishMapPointstoCloud(std::vector<ORB_SLAM2::MapPoint*> points,ros::Publi
 	pcl::toROSMsg(*map_cloud, ros_map_cloud);
 	ros_map_cloud.header.frame_id = "map";
 	publisher.publish(ros_map_cloud);
+}
+
+void VisualizeCostCube(cv::Mat cost_map){
+	if(cost_map.empty()){
+		cout << "CostCube map is empty.";
+		return;
+	}
+	visualization_msgs::MarkerArray markerArr;
+	visualization_msgs::Marker marker;
+	marker.header.frame_id = "map";
+	marker.header.stamp = ros::Time::now();
+	marker.ns = "";
+	marker.lifetime = ros::Duration();	
+	marker.type = visualization_msgs::Marker::POINTS;
+	marker.action = visualization_msgs::Marker::ADD;
+	marker.pose.orientation.x = 0.0;
+	marker.pose.orientation.y = 0.0;
+	marker.pose.orientation.z = 0.0;
+	marker.pose.orientation.w = 1.0;
+	marker.scale.x = 0.1;
+	marker.scale.y = 0.1;
+	marker.scale.z = 0.1;
+	marker.color.a = 1.0; // Don't forget to set the alpha!
+	
+	int marker_id = 0;
+	for (int row = 0; row < cost_map.size[0]; ++row)
+		for (int col = 0; col < cost_map.size[1]; ++col)
+                        for (int hei = 0;hei < cost_map.size[2]; ++ hei){				
+				marker.pose.position.x = row;
+				marker.pose.position.y = col;
+				marker.pose.position.z = hei;				
+				marker.color.r = cost_map.at<uchar>(row, col, hei);
+				marker.color.g = cost_map.at<uchar>(row, col, hei);
+				marker.color.b = cost_map.at<uchar>(row, col, hei);
+				marker.id = marker_id++;
+				markerArr.markers.push_back(marker);				
+			}
+	vis_pub.publish(markerArr);
 }
 
 inline bool isInteger(const std::string & s){

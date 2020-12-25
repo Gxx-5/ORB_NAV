@@ -13,7 +13,7 @@ public:
         cv::Mat map_prob;
 
         CostCube(double len,double res);
-        void getCostCube(vector<geometry_msgs::Point> map_points,geometry_msgs::Pose camera_pose);
+        cv::Mat getCostCube(vector<geometry_msgs::Point> map_points,geometry_msgs::Pose camera_pose);
         void processMapPts(const std::vector<geometry_msgs::Point> &pts, unsigned int n_pts,
 				   unsigned int start_id, const geometry_msgs::Point &cam_pos);
         void Bresenham3D(const geometry_msgs::Point &pt_pos, cv::Mat &occupied,

@@ -7,13 +7,14 @@ CostCube::CostCube(double len,double res){
         size[0] = size[1] = size[2] = voxel_n;
 }
 
-void CostCube::getCostCube(vector<geometry_msgs::Point> map_points,geometry_msgs::Pose camera_pose){
+cv::Mat CostCube::getCostCube(vector<geometry_msgs::Point> map_points,geometry_msgs::Pose camera_pose){
+                processMapPts(map_points,0,0,camera_pose.position);
         map_prob = cv::Mat::zeros(3,size,CV_8UC1);
         for (int row = 0; row < voxel_n; ++row)
 	{
 		for (int col = 0; col < voxel_n; ++col)
 		{
-                        for (int hei = 0;hei < voxel_n; ++ hei){                        
+                        for (int hei = 0;hei < voxel_n; ++ hei){
                                 int visits = visit_counter.at<int>(row, col,hei);
                                 int occupieds = occupied_counter.at<int>(row, col,hei);
                                 int maxVisitNum = *max_element(visit_counter.begin<int>(),visit_counter.end<int>());
@@ -35,17 +36,19 @@ void CostCube::getCostCube(vector<geometry_msgs::Point> map_points,geometry_msgs
                         }
                 }
 	}
+        return map_prob;
 }
 
 void CostCube::processMapPts(const std::vector<geometry_msgs::Point> &pts, unsigned int n_pts,
 				   unsigned int start_id, const geometry_msgs::Point &cam_pos){
         occupied_counter = cv::Mat::zeros(3,size,CV_32SC1);
 	visit_counter = cv::Mat::zeros(3,size,CV_32SC1);
-        unsigned int end_id = start_id + n_pts;
-        for (unsigned int pt_id = start_id; pt_id < end_id; ++pt_id)
-		{
-			Bresenham3D(pts[pt_id], occupied_counter, visit_counter,cam_pos);
-		}
+        // unsigned int end_id = start_id + n_pts;
+        // for (unsigned int pt_id = start_id; pt_id < end_id; ++pt_id)
+        for (unsigned int pt_id = 0; pt_id < pts.size(); ++pt_id)
+        {
+                Bresenham3D(pts[pt_id], occupied_counter, visit_counter,cam_pos);
+        }
 }
 
 void CostCube::Bresenham3D(const geometry_msgs::Point &pt_pos, cv::Mat &occupied,
