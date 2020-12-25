@@ -7,8 +7,34 @@ CostCube::CostCube(double len,double res){
         size[0] = size[1] = size[2] = voxel_n;
 }
 
-CostCube::Cube CostCube::getCostCube(vector<geometry_msgs::Point> map_points,geometry_msgs::Pose camera_pose){
-        Cube cube;
+void CostCube::getCostCube(vector<geometry_msgs::Point> map_points,geometry_msgs::Pose camera_pose){
+        map_prob = cv::Mat::zeros(3,size,CV_8UC1);
+        for (int row = 0; row < voxel_n; ++row)
+	{
+		for (int col = 0; col < voxel_n; ++col)
+		{
+                        for (int hei = 0;hei < voxel_n; ++ hei){                        
+                                int visits = visit_counter.at<int>(row, col,hei);
+                                int occupieds = occupied_counter.at<int>(row, col,hei);
+                                int maxVisitNum = *max_element(visit_counter.begin<int>(),visit_counter.end<int>());
+
+                                if (occupieds){
+                                        map_prob.at<uchar>(row, col, hei) = 0;
+                                }
+                                else if (visits <= free_thresh)
+                                {
+                                        map_prob.at<uchar>(row, col, hei) = 255;
+                                        //grid_map_proba.at<uchar>(row, col) = 128;
+                                }
+                                else if(visits > occupied_thresh){
+                                        map_prob.at<uchar>(row, col, hei) = 0;
+                                }
+                                else{
+                                        map_prob.at<uchar>(row, col, hei) = int((1-1.0*visits/maxVisitNum)*255);
+                                }
+                        }
+                }
+	}
 }
 
 void CostCube::processMapPts(const std::vector<geometry_msgs::Point> &pts, unsigned int n_pts,
