@@ -382,7 +382,7 @@ void publish(ORB_SLAM2::System &SLAM, ros::Publisher &pub_pts_and_pose,
 	std::vector<ORB_SLAM2::MapPoint*> nearby_points = SLAM.getMap()->GetNearbyMapPoints();
 	vector<geometry_msgs::Point> nearby_points_pos;
 	PublishMapPointstoCloud(nearby_points,pub_nearby_map_cloud,&nearby_points_pos);
-	costcube_map = costcube.getCostCube(nearby_points_pos,camera_pose);
+	costcube_map = costcube.calCostCubeByBresenham3D(nearby_points_pos,camera_pose);
 	VisualizeCostCube(costcube_map);
 }
 

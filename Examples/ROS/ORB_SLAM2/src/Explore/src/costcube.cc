@@ -7,8 +7,9 @@ CostCube::CostCube(double len,double res){
         size[0] = size[1] = size[2] = voxel_n;
 }
 
-cv::Mat CostCube::getCostCube(vector<geometry_msgs::Point> map_points,geometry_msgs::Pose camera_pose){
-                processMapPts(map_points,0,0,camera_pose.position);
+cv::Mat CostCube::calCostCubeByBresenham3D(vector<geometry_msgs::Point> map_points,geometry_msgs::Pose camera_pose){
+        processMapPts(map_points,0,0,camera_pose.position);
+        //cost = exp(-1.0 * cost_scaling_factor * (distance_from_obstacle – inscribed_radius)) * (costmap_2d::INSCRIBED_INFLATED_OBSTACLE – 1)
         map_prob = cv::Mat::zeros(3,size,CV_8UC1);
         for (int row = 0; row < voxel_n; ++row)
 	{
@@ -66,6 +67,7 @@ void CostCube::Bresenham3D(const geometry_msgs::Point &pt_pos, cv::Mat &occupied
         }		
 	// Increment the occupency account of the grid cell where map point is located
 	++occupied.at<int>(x2,y2,z2);
+        occupied_ind.push_back(vector<int>{x2,y2,z2});
 
         int i, dx, dy, dz, l, m, n, x_inc, y_inc, z_inc, err_1, err_2, dx2, dy2, dz2;
         int point[3];
@@ -140,3 +142,52 @@ void CostCube::Bresenham3D(const geometry_msgs::Point &pt_pos, cv::Mat &occupied
         }
         ++visited.at<int>(point[0], point[1], point[2]);
 }
+
+cv::Mat CostCube::calCostCubeByDistance(vector<geometry_msgs::Point> map_points,geometry_msgs::Pose camera_pose){
+        processMapPts(map_points,0,0,camera_pose.position);
+        map_prob = cv::Mat::zeros(3,size,CV_8UC1);
+        for (int row = 0; row < voxel_n; ++row)
+		for (int col = 0; col < voxel_n; ++col)		
+                        for (int hei = 0;hei < voxel_n; ++ hei){
+                                // TODO : Maybe need normalization? 
+                                double dst = dstFromVoxelToObstacle(vector<int>{row,col,hei});
+                                map_prob.at<uchar>(row, col, hei) = computeCostByDistance(dst);
+                        }
+        return map_prob;
+}
+
+double CostCube::dstFromVoxelToObstacle(vector<int> pos_id){
+//Calculate average distance between current voxel and nearby obstacle. 
+        if(pos_id.size()!=3){
+                cout << "Wrong dim of voxel index has been input!";
+                return;
+        }
+        vector<float> dst_vec;
+        for(int i=0;i<occupied_ind.size();++i){
+                dst_vec.push_back(sqrt( pow(occupied_ind[i][0]-pos_id[0],2)+pow(occupied_ind[i][1]-pos_id[1],2)+pow(occupied_ind[i][2]-pos_id[2],2) ))
+        }
+        sort(dst_vec.begin(),dst_vec.end());
+        float dst_thresh = (dst_vec[-1] - dst_vec[0])/10;
+        double dst;
+        int i;
+        for(i=0;dst_vec[i]<=dst_thresh;++i){
+                dst +=  dst_vec[i];
+        }
+        return dst/i;
+}
+
+unsigned char CostCube::computeCostByDistance(const double distance)
+  {
+    unsigned char cost = 0;
+    if (distance == 0)
+      cost = LETHAL_OBSTACLE;
+    else if (distance  <= inscribed_radius_)
+      cost = INSCRIBED_INFLATED_OBSTACLE;
+    else
+    {
+      // make sure cost falls off by Euclidean distance
+      double factor = exp(-1.0 * cost_scaling_factor * (distance - inscribed_radius_));
+      cost = (unsigned char)((INSCRIBED_INFLATED_OBSTACLE - 1) * factor);
+    }
+    return cost;
+  }
