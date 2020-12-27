@@ -2,6 +2,7 @@
 #include "geometry_msgs/Pose.h"
 #include "geometry_msgs/Point.h"
 #include <opencv2/core/core.hpp>
+#include<opencv2/viz.hpp>
 
 using namespace std;
 
@@ -40,18 +41,17 @@ public:
         static const unsigned char FREE_SPACE = 0;
         cv::Mat map_prob;
 
-        CostCube(double len,double res);
+        CostCube(double radius,double res);
         cv::Mat calCostCubeByBresenham3D(vector<geometry_msgs::Point> map_points,geometry_msgs::Pose camera_pose);
         cv::Mat calCostCubeByDistance(vector<geometry_msgs::Point> map_points,geometry_msgs::Pose camera_pose);
-        void processMapPts(const std::vector<geometry_msgs::Point> &pts, unsigned int n_pts,
-				   unsigned int start_id, const geometry_msgs::Point &cam_pos);
+        void processMapPts(const std::vector<geometry_msgs::Point> &pts, const geometry_msgs::Point &cam_pos,bool cal_occupied_only=false);
         void Bresenham3D(const geometry_msgs::Point &pt_pos, cv::Mat &occupied,
-				  cv::Mat &visited,const geometry_msgs::Point &cam_pos);
-        unsigned char computeCostByDistance(const double distance);
-        double dstFromVoxelToObstacle(vector<int> pos_id);
+				  cv::Mat &visited,const geometry_msgs::Point &cam_pos,bool cal_occupied_only=false);
+        float computeCostByDistance(const float distance);
+        float dstFromVoxelToObstacle(vector<int> pos_id);
 
 private:
-        double side_length;
+        double filter_radius;
         double resoluion;
         int voxel_n;
         int size[3];

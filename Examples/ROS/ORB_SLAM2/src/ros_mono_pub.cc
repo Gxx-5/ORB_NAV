@@ -48,7 +48,7 @@
 
 //! parameters
 bool read_from_topic = true, read_from_camera = false;
-double nearbyradius = 1.0;
+// double nearbyradius = 1.0;
 //Publish
 ros::Publisher pub_cloud;
 ros::Publisher pub_map_cloud;
@@ -64,20 +64,20 @@ cv::VideoCapture cap_obj;
 
 bool pub_all_pts = false;
 int pub_count = 0;
-double costcube_range = 1.0f;
-double costcube_res = 0.05f;
+double filter_radius = 0.5;
+double costcube_resolution = 0.1;
 cv::Mat costcube_map;
-CostCube COSTCUBE(costcube_range,costcube_res);
+CostCube COSTCUBE(filter_radius,costcube_resolution);
 
 void LoadImages(const string &strSequence, vector<string> &vstrImageFilenames,
 	vector<double> &vTimestamps);
 inline bool isInteger(const std::string & s);
 void publish(ORB_SLAM2::System &SLAM, ros::Publisher &pub_pts_and_pose,
 			 ros::Publisher &pub_all_kf_and_pts, ros::Publisher &pub_cur_camera_pose, int frame_id);
-void ModifyNearbyPoint(ORB_SLAM2::Map* map,std::vector<float> CamPos);
+void FilterNearbyPoint(ORB_SLAM2::Map* map,std::vector<float> CamPos);
 void PublishMapPointstoCloud(std::vector<ORB_SLAM2::MapPoint*> points,ros::Publisher publisher,
 								vector<geometry_msgs::Point>* points_pos = NULL);
-void VisualizeCostCube(cv::Mat cost_map);
+void VisualizeCostCube(cv::Mat cost_map,geometry_msgs::Pose camera_pose);
 
 class ImageGrabber{
 public:
@@ -376,22 +376,24 @@ void publish(ORB_SLAM2::System &SLAM, ros::Publisher &pub_pts_and_pose,
 		camera_poseStamped.header.stamp = ros::Time::now();
 		pub_cur_camera_pose.publish(camera_poseStamped);
 		//Modify Map points nearby camear by the way
-		ModifyNearbyPoint(SLAM.getMap(),std::vector<float>{twc.at<float>(0),twc.at<float>(1),twc.at<float>(2)});
+		// FilterNearbyPoint(SLAM.getMap(),std::vector<float>{twc.at<float>(0),twc.at<float>(1),twc.at<float>(2)});
 	}
 	//Publish all map points
 	std::vector<ORB_SLAM2::MapPoint*> all_map_points = SLAM.getMap()->GetAllMapPoints();
-	PublishMapPointstoCloud(all_map_points,pub_map_cloud);
+	vector<geometry_msgs::Point> map_points_pos;
+	PublishMapPointstoCloud(all_map_points,pub_map_cloud,&map_points_pos);
 	//Publish nearby map points
-	std::vector<ORB_SLAM2::MapPoint*> nearby_points = SLAM.getMap()->GetNearbyMapPoints();
-	vector<geometry_msgs::Point> nearby_points_pos;
-	PublishMapPointstoCloud(nearby_points,pub_nearby_map_cloud,&nearby_points_pos);
-	costcube_map = COSTCUBE.calCostCubeByBresenham3D(nearby_points_pos,camera_pose);
-	VisualizeCostCube(costcube_map);
+	// std::vector<ORB_SLAM2::MapPoint*> nearby_points = SLAM.getMap()->GetNearbyMapPoints();
+	// vector<geometry_msgs::Point> nearby_points_pos;
+	// PublishMapPointstoCloud(nearby_points,pub_nearby_map_cloud,&nearby_points_pos);
+	costcube_map = COSTCUBE.calCostCubeByDistance(map_points_pos,camera_pose);
+	VisualizeCostCube(costcube_map,camera_pose);
 }
 
-void ModifyNearbyPoint(ORB_SLAM2::Map* map,std::vector<float> CamPos){
+void FilterNearbyPoint(ORB_SLAM2::Map* map,std::vector<float> CamPos){
 	std::vector<ORB_SLAM2::MapPoint*> nearby_points = map->GetNearbyMapPoints();
 	int num_pts = nearby_points.size();
+	int num_filtered = 0;
 	for (int pt_id = 1; pt_id <= num_pts; ++pt_id){
 		if (!nearby_points[pt_id - 1] || nearby_points[pt_id - 1]->isBad()) {
 			// printf("Point %d is bad\n", pt_id);
@@ -404,10 +406,13 @@ void ModifyNearbyPoint(ORB_SLAM2::Map* map,std::vector<float> CamPos){
 			continue;
 		}
 		double dst = sqrt(pow((wp.at<float>(0)-CamPos[0]),2)+pow((wp.at<float>(1)-CamPos[1]),2)+pow((wp.at<float>(2)-CamPos[2]),2));
-		if(dst>nearbyradius){
+		// cout << "Distance from current point  is " << dst << endl;
+		if(dst > filter_radius){
 			map->EraseNearbyMapPoint(nearby_points[pt_id]);
+			num_filtered++;
 		}
 	}
+	cout << "total points num " << num_pts << " filtered  " << num_filtered << " points " << endl;
 }
 
 void PublishMapPointstoCloud(std::vector<ORB_SLAM2::MapPoint*> points,ros::Publisher publisher,
@@ -415,10 +420,10 @@ void PublishMapPointstoCloud(std::vector<ORB_SLAM2::MapPoint*> points,ros::Publi
 	int all_map_pts = points.size();
 	// Publish all map points 
 	pcl::PointCloud<pcl::PointXYZ>::Ptr map_cloud(new pcl::PointCloud<pcl::PointXYZ>);	
-	
+	int pts_num = 0;
 	for (int pt_id = 1; pt_id <= all_map_pts; ++pt_id){
 		if (!points[pt_id - 1] || points[pt_id - 1]->isBad()) {
-			printf("Point %d is bad\n", pt_id);
+			// printf("Point %d is bad\n", pt_id);
 			continue;
 		}
 		cv::Mat wp = points[pt_id - 1]->GetWorldPos();
@@ -433,51 +438,94 @@ void PublishMapPointstoCloud(std::vector<ORB_SLAM2::MapPoint*> points,ros::Publi
 			pt_pos.y = wp.at<float>(1);
 			pt_pos.z = wp.at<float>(2);
 			points_pos->push_back(pt_pos);
-		}
+			pts_num++;
+		}		
 		map_cloud->push_back(pcl::PointXYZ(wp.at<float>(0), wp.at<float>(1), wp.at<float>(2)));
 		//printf("Done getting map point %d\n", pt_id);
 	}
+	// if(points_pos){
+	// 	cout << "pts_num in pointscloud is " << pts_num << endl;
+	// }
 	sensor_msgs::PointCloud2 ros_map_cloud;
 	pcl::toROSMsg(*map_cloud, ros_map_cloud);
 	ros_map_cloud.header.frame_id = "map";
 	publisher.publish(ros_map_cloud);
 }
 
-void VisualizeCostCube(cv::Mat cost_map){
+vector<int> getColor(int value){
+	vector<int> endColor{139,0,0};
+	vector<int> startColor{255,69,0};	
+	if(value >= 255)
+		return endColor;
+	else if(value <= 0)
+		return startColor;
+
+	int r=endColor[0]-startColor[0];
+	int g=endColor[1]-startColor[1];
+	int b=endColor[2]-startColor[2];
+	
+	// int nSteps = max(abs(r), max(abs(g), abs(b)));
+	// if (nSteps < 1) nSteps = 1;
+	int nSteps = 255;
+	// Calculate the step size for each color
+	float rStep=r/(float)nSteps;
+	float gStep=g/(float)nSteps;
+	float bStep=b/(float)nSteps;
+
+	// Reset the colors to the starting position
+	float fr=startColor[0];
+	float fg=startColor[0];
+	float fb=startColor[0];	
+
+	// float step = (value - 255)/255;
+	int step = value;
+	return vector<int>{(int)(fr+rStep*step+0.5),(int)(fg+gStep*step+0.5),(int)(fb+bStep*step+0.5)};
+}
+
+void VisualizeCostCube(cv::Mat cost_map,geometry_msgs::Pose camera_pose){
 	if(cost_map.empty()){
 		cout << "CostCube map is empty." << endl;
 		return;
 	}
+	int center_voxel =  filter_radius / costcube_resolution;
 	visualization_msgs::MarkerArray markerArr;
 	visualization_msgs::Marker marker;
 	marker.header.frame_id = "map";
 	marker.header.stamp = ros::Time::now();
 	marker.ns = "";
-	marker.lifetime = ros::Duration();	
-	marker.type = visualization_msgs::Marker::POINTS;
+	marker.lifetime = ros::Duration(0.1);	
+	marker.type = visualization_msgs::Marker::CUBE;
 	marker.action = visualization_msgs::Marker::ADD;
 	marker.pose.orientation.x = 0.0;
 	marker.pose.orientation.y = 0.0;
 	marker.pose.orientation.z = 0.0;
 	marker.pose.orientation.w = 1.0;
-	marker.scale.x = 0.1;
-	marker.scale.y = 0.1;
-	marker.scale.z = 0.1;
-	marker.color.a = 1.0; // Don't forget to set the alpha!
+	marker.scale.x = 0.8 * costcube_resolution;
+	marker.scale.y = 0.8 * costcube_resolution;
+	marker.scale.z = 0.8 * costcube_resolution;
+	marker.color.a = 0.1; // Don't forget to set the alpha!
 	
 	int marker_id = 0;
-	for (int row = 0; row < cost_map.size[0]; ++row)
-		for (int col = 0; col < cost_map.size[1]; ++col)
-                        for (int hei = 0;hei < cost_map.size[2]; ++ hei){				
-				marker.pose.position.x = row;
-				marker.pose.position.y = col;
-				marker.pose.position.z = hei;				
-				marker.color.r = cost_map.at<uchar>(row, col, hei);
-				marker.color.g = cost_map.at<uchar>(row, col, hei);
-				marker.color.b = cost_map.at<uchar>(row, col, hei);
+	for (int row = 0; row < cost_map.size[0]; ++row){
+		for (int col = 0; col < cost_map.size[1]; ++col){
+                        for (int hei = 0;hei < cost_map.size[2]; ++ hei){
+				int cur_cost =  cost_map.at<float>(row, col, hei);
+				// cout << "cur_cost:" << cur_cost << " ";
+				vector<int> color  = getColor(cur_cost);
+				marker.pose.position.x = camera_pose.position.x + (row - center_voxel) * costcube_resolution;
+				marker.pose.position.y = camera_pose.position.y + (col - center_voxel) * costcube_resolution;
+				marker.pose.position.z = camera_pose.position.z + (hei - center_voxel) * costcube_resolution;
+				marker.color.r =  color[0];
+				marker.color.g = color[1];
+				marker.color.b = color[2];
 				marker.id = marker_id++;
-				markerArr.markers.push_back(marker);				
+				markerArr.markers.push_back(marker);
 			}
+			cout << endl;
+		}
+		cout << endl;
+	}
+	cout << endl << endl;
 	vis_pub.publish(markerArr);
 }
 

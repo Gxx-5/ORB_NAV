@@ -65,7 +65,6 @@ public:
     void InformNewBigChange();
     int GetLastBigChangeIdx();
     void ResetNearbyPoint();
-    void ModifyNearbyPoint(std::vector<float> CamPos);
 
     std::vector<KeyFrame*> GetAllKeyFrames();
     std::vector<MapPoint*> GetAllMapPoints();
