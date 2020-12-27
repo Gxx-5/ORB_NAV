@@ -51,6 +51,7 @@ include_directories(
 ${PROJECT_SOURCE_DIR}
 ${PROJECT_SOURCE_DIR}/../../../
 ${PROJECT_SOURCE_DIR}/../../../include
+${PROJECT_SOURCE_DIR}/src/Explore/include
 ${Pangolin_INCLUDE_DIRS}
 )
 
@@ -75,19 +76,20 @@ ${LIBS}
 
 rosbuild_add_executable(Monopub
 src/ros_mono_pub.cc
+src/Explore/src/costcube.cc
 )
 
 target_link_libraries(Monopub
 ${LIBS}
 )
 
-rosbuild_add_executable(Monosub
-src/ros_mono_sub.cc
-)
+# rosbuild_add_executable(Monosub
+# src/ros_mono_sub.cc
+# )
 
-target_link_libraries(Monosub
-${LIBS}
-)
+# target_link_libraries(Monosub
+# ${LIBS}
+# )
 
 rosbuild_add_executable(RGBDpub
 src/ros_rgbd_pub.cc

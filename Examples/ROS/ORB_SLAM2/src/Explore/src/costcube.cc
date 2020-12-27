@@ -8,7 +8,7 @@ CostCube::CostCube(double len,double res){
 }
 
 cv::Mat CostCube::calCostCubeByBresenham3D(vector<geometry_msgs::Point> map_points,geometry_msgs::Pose camera_pose){
-        processMapPts(map_points,0,0,camera_pose.position);
+                processMapPts(map_points,0,0,camera_pose.position);
         //cost = exp(-1.0 * cost_scaling_factor * (distance_from_obstacle – inscribed_radius)) * (costmap_2d::INSCRIBED_INFLATED_OBSTACLE – 1)
         map_prob = cv::Mat::zeros(3,size,CV_8UC1);
         for (int row = 0; row < voxel_n; ++row)
@@ -62,9 +62,9 @@ void CostCube::Bresenham3D(const geometry_msgs::Point &pt_pos, cv::Mat &occupied
         int y2 = int((pt_pos.y - cam_pos.y)/resoluion + voxel_n/2);
         int z2 = int((pt_pos.z - cam_pos.y)/resoluion + voxel_n/2);
 	if (x2 < 0 || x2 >= voxel_n||y2 < 0 || y2 >= voxel_n||z2 < 0 || z2 >= voxel_n){
-                cout << "Index out of bound when calculating Bresenham3D" << endl;
+                cout << "Target index [ "<< x2 << " , " << y2 << " , " << z2 << " ] out of bound "<< voxel_n << "(maximum) when calculating Bresenham3D" << endl;
                 return;
-        }		
+        }
 	// Increment the occupency account of the grid cell where map point is located
 	++occupied.at<int>(x2,y2,z2);
         occupied_ind.push_back(vector<int>{x2,y2,z2});
@@ -160,15 +160,15 @@ double CostCube::dstFromVoxelToObstacle(vector<int> pos_id){
 //Calculate average distance between current voxel and nearby obstacle. 
         if(pos_id.size()!=3){
                 cout << "Wrong dim of voxel index has been input!";
-                return;
+                return -1;
         }
         vector<float> dst_vec;
-        for(int i=0;i<occupied_ind.size();++i){
-                dst_vec.push_back(sqrt( pow(occupied_ind[i][0]-pos_id[0],2)+pow(occupied_ind[i][1]-pos_id[1],2)+pow(occupied_ind[i][2]-pos_id[2],2) ))
+        for(uint i=0;i<occupied_ind.size();++i){
+                dst_vec.push_back(sqrt( pow(occupied_ind[i][0]-pos_id[0],2)+pow(occupied_ind[i][1]-pos_id[1],2)+pow(occupied_ind[i][2]-pos_id[2],2)));
         }
         sort(dst_vec.begin(),dst_vec.end());
         float dst_thresh = (dst_vec[-1] - dst_vec[0])/10;
-        double dst;
+        double dst = 0.0;
         int i;
         for(i=0;dst_vec[i]<=dst_thresh;++i){
                 dst +=  dst_vec[i];

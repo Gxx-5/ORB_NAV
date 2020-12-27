@@ -38,14 +38,13 @@
 #include <pcl_conversions/pcl_conversions.h>
 
 #include<opencv2/core/core.hpp>
-
-#include"../../../include/System.h"
+#include "../../../../include/System.h"
 
 #include "MapPoint.h"
 #include <opencv2/highgui/highgui_c.h>
 #include <opencv2/highgui/highgui.hpp>
 #include <Converter.h>
-#include "costcube.h"
+#include "Explore/include/costcube.h"
 
 //! parameters
 bool read_from_topic = true, read_from_camera = false;
@@ -65,16 +64,20 @@ cv::VideoCapture cap_obj;
 
 bool pub_all_pts = false;
 int pub_count = 0;
-int costcube_range = 1.0;
-int costcube_res = 0.05;
+double costcube_range = 1.0f;
+double costcube_res = 0.05f;
 cv::Mat costcube_map;
-CostCube costcube(costcube_range,costcube_res);
+CostCube COSTCUBE(costcube_range,costcube_res);
 
 void LoadImages(const string &strSequence, vector<string> &vstrImageFilenames,
 	vector<double> &vTimestamps);
 inline bool isInteger(const std::string & s);
 void publish(ORB_SLAM2::System &SLAM, ros::Publisher &pub_pts_and_pose,
 			 ros::Publisher &pub_all_kf_and_pts, ros::Publisher &pub_cur_camera_pose, int frame_id);
+void ModifyNearbyPoint(ORB_SLAM2::Map* map,std::vector<float> CamPos);
+void PublishMapPointstoCloud(std::vector<ORB_SLAM2::MapPoint*> points,ros::Publisher publisher,
+								vector<geometry_msgs::Point>* points_pos = NULL);
+void VisualizeCostCube(cv::Mat cost_map);
 
 class ImageGrabber{
 public:
@@ -289,7 +292,7 @@ void publish(ORB_SLAM2::System &SLAM, ros::Publisher &pub_pts_and_pose,
 		int n_map_pts = map_points.size();
 		// int all_map_pts = all_map_points.size();
 
-		printf("\ntracked_map_pts: %d\n", n_map_pts);
+		// printf("\ntracked_map_pts: %d\n", n_map_pts);
 		// printf("all_map_pts: %d\n", all_map_pts);
 
 		pcl::PointCloud<pcl::PointXYZ>::Ptr pcl_cloud(new pcl::PointCloud<pcl::PointXYZ>);
@@ -339,8 +342,8 @@ void publish(ORB_SLAM2::System &SLAM, ros::Publisher &pub_pts_and_pose,
 		ros_cloud.header.frame_id = "map";
 		// ros_cloud.header.seq = ni;
 
-		printf("valid map pts: %lu\n", pt_array.poses.size()-1);				
-		printf("ros_cloud size: %d x %d\n", ros_cloud.height, ros_cloud.width);
+		// printf("valid map pts: %lu\n", pt_array.poses.size()-1);				
+		// printf("ros_cloud size: %d x %d\n", ros_cloud.height, ros_cloud.width);
 		pub_cloud.publish(ros_cloud);
 
 		pt_array.header.frame_id = "map";
@@ -382,7 +385,7 @@ void publish(ORB_SLAM2::System &SLAM, ros::Publisher &pub_pts_and_pose,
 	std::vector<ORB_SLAM2::MapPoint*> nearby_points = SLAM.getMap()->GetNearbyMapPoints();
 	vector<geometry_msgs::Point> nearby_points_pos;
 	PublishMapPointstoCloud(nearby_points,pub_nearby_map_cloud,&nearby_points_pos);
-	costcube_map = costcube.calCostCubeByBresenham3D(nearby_points_pos,camera_pose);
+	costcube_map = COSTCUBE.calCostCubeByBresenham3D(nearby_points_pos,camera_pose);
 	VisualizeCostCube(costcube_map);
 }
 
@@ -408,7 +411,7 @@ void ModifyNearbyPoint(ORB_SLAM2::Map* map,std::vector<float> CamPos){
 }
 
 void PublishMapPointstoCloud(std::vector<ORB_SLAM2::MapPoint*> points,ros::Publisher publisher,
-								vector<geometry_msgs::Point>* points_pos = NULL){
+								vector<geometry_msgs::Point>* points_pos){
 	int all_map_pts = points.size();
 	// Publish all map points 
 	pcl::PointCloud<pcl::PointXYZ>::Ptr map_cloud(new pcl::PointCloud<pcl::PointXYZ>);	
@@ -442,7 +445,7 @@ void PublishMapPointstoCloud(std::vector<ORB_SLAM2::MapPoint*> points,ros::Publi
 
 void VisualizeCostCube(cv::Mat cost_map){
 	if(cost_map.empty()){
-		cout << "CostCube map is empty.";
+		cout << "CostCube map is empty." << endl;
 		return;
 	}
 	visualization_msgs::MarkerArray markerArr;
