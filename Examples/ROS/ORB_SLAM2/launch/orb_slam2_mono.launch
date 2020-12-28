@@ -1,7 +1,10 @@
 <launch>
+  <arg name="focal_len" type="double" default="1.0">
+  <arg name="field_size" type="double" default="0.25">
+  <arg name="resolution" type="double" default="0.1">
   <arg name="voc_file" default="$(find ORB_SLAM2)/Vocabulary/ORBvoc.bin"/>
   <arg name="settings_file" default="$(find ORB_SLAM2)/config/mono.yaml"/>
-  <arg name="image_topic" value="/usb_cam/image_raw"/>
+  <arg name="image_topic" default="/usb_cam/image_raw"/>
 
   <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" output="screen" >
     <param name="video_device" value="/dev/video0" />
@@ -12,8 +15,8 @@
     <param name="io_method" value="mmap"/>
   </node>
 
-  <node name="Monopub" pkg="ORB_SLAM2"
-      type="Monopub" args = "$(arg voc_file) $(arg settings_file)" output="screen">
+  <node name="Monopub" pkg="ORB_SLAM2"  type="Monopub" 
+        args = "$(arg voc_file) $(arg settings_file)" output="screen">
 
        <remap from="/camera/image_raw" to="$(arg image_topic)" />
 
@@ -31,5 +34,9 @@
        <param name="pointcloud_frame_id" type="string" value="map" />
        <param name="camera_frame_id" type="string" value="camera_link" />
        <param name="min_num_kf_in_map" type="int" value="5" />
+
+       <param name="focal_len" type="double" value="$(arg focal_len)" />
+       <param name="field_size" type="double" value="$(arg field_size)" />
+       <param name="resolution" type="double" value="$(arg resolution)" />
   </node>
 </launch>

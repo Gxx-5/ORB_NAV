@@ -52,8 +52,8 @@ bool read_from_topic = true, read_from_camera = false;
 //Publish
 ros::Publisher pub_cloud;
 ros::Publisher pub_map_cloud;
-ros::Publisher pub_nearby_map_cloud;
-ros::Publisher vis_pub;
+ros::Publisher pub_cur_view_cloud;
+ros::Publisher vis_pub,vis_text_pub;
 bool save_to_results = false;
 std::string image_topic = "/camera/image_raw";
 int all_pts_pub_gap = 0;
@@ -65,9 +65,11 @@ cv::VideoCapture cap_obj;
 bool pub_all_pts = false;
 int pub_count = 0;
 double filter_radius = 0.5;
+double focal_len = 1.5;
+double field_size = 0.5;
 double costcube_resolution = 0.1;
 cv::Mat costcube_map;
-CostCube COSTCUBE(filter_radius,costcube_resolution);
+CostCube COSTCUBE(focal_len,field_size,costcube_resolution);
 
 void LoadImages(const string &strSequence, vector<string> &vstrImageFilenames,
 	vector<double> &vTimestamps);
@@ -111,12 +113,18 @@ int main(int argc, char **argv){
 	ros::NodeHandle nodeHandler;
 	pub_cloud = nodeHandler.advertise<sensor_msgs::PointCloud2>("cloud_in", 1000);
 	pub_map_cloud = nodeHandler.advertise<sensor_msgs::PointCloud2>("map_cloud", 1000);
-	pub_nearby_map_cloud = nodeHandler.advertise<sensor_msgs::PointCloud2>("nearby_map_cloud", 1000);
-	vis_pub = nodeHandler.advertise<visualization_msgs::MarkerArray>("CostCube",1);
+	pub_cur_view_cloud = nodeHandler.advertise<sensor_msgs::PointCloud2>("cur_map_cloud", 1000);
+	vis_pub = nodeHandler.advertise<visualization_msgs::MarkerArray>("CostCube",10);
+	vis_text_pub = nodeHandler.advertise<visualization_msgs::MarkerArray>("CostCubeText",10);
 	ros::Publisher pub_pts_and_pose = nodeHandler.advertise<geometry_msgs::PoseArray>("pts_and_pose", 1000);
 	ros::Publisher pub_all_kf_and_pts = nodeHandler.advertise<geometry_msgs::PoseArray>("all_kf_and_pts", 1000);
 	// ros::Publisher pub_cur_camera_pose = nodeHandler.advertise<geometry_msgs::Pose>("/cur_camera_pose", 1000);
 	 ros::Publisher pub_cur_camera_pose = nodeHandler.advertise<geometry_msgs::PoseStamped>("/cur_camera_pose", 1000);
+	//Param 
+	nodeHandler.getParam("focal_len",focal_len);
+	nodeHandler.getParam("field_size",field_size);
+	nodeHandler.getParam("resolution",costcube_resolution);
+	
 	if (read_from_topic) {
 		ImageGrabber igb(SLAM, pub_pts_and_pose, pub_all_kf_and_pts, pub_cur_camera_pose);
 		ros::Subscriber sub = nodeHandler.subscribe(image_topic, 1, &ImageGrabber::GrabImage, &igb);
@@ -378,14 +386,16 @@ void publish(ORB_SLAM2::System &SLAM, ros::Publisher &pub_pts_and_pose,
 		//Modify Map points nearby camear by the way
 		// FilterNearbyPoint(SLAM.getMap(),std::vector<float>{twc.at<float>(0),twc.at<float>(1),twc.at<float>(2)});
 	}
-	//Publish all map points
-	std::vector<ORB_SLAM2::MapPoint*> all_map_points = SLAM.getMap()->GetAllMapPoints();
+	//Publish map points
 	vector<geometry_msgs::Point> map_points_pos;
-	PublishMapPointstoCloud(all_map_points,pub_map_cloud,&map_points_pos);
+	// std::vector<ORB_SLAM2::MapPoint*> all_map_points = SLAM.getMap()->GetAllMapPoints();	
+	// PublishMapPointstoCloud(all_map_points,pub_map_cloud,&map_points_pos);
+	std::vector<ORB_SLAM2::MapPoint*> cur_view_points = SLAM.GetTrackedMapPoints();
+	PublishMapPointstoCloud(cur_view_points,pub_cur_view_cloud,&map_points_pos);
 	//Publish nearby map points
 	// std::vector<ORB_SLAM2::MapPoint*> nearby_points = SLAM.getMap()->GetNearbyMapPoints();
 	// vector<geometry_msgs::Point> nearby_points_pos;
-	// PublishMapPointstoCloud(nearby_points,pub_nearby_map_cloud,&nearby_points_pos);
+	// PublishMapPointstoCloud(nearby_points,pub_cur_map_cloud,&nearby_points_pos);
 	costcube_map = COSTCUBE.calCostCubeByDistance(map_points_pos,camera_pose);
 	VisualizeCostCube(costcube_map,camera_pose);
 }
@@ -453,29 +463,29 @@ void PublishMapPointstoCloud(std::vector<ORB_SLAM2::MapPoint*> points,ros::Publi
 }
 
 vector<int> getColor(int value){
-	vector<int> endColor{139,0,0};
-	vector<int> startColor{255,69,0};	
+	vector<int> startColor{0,255,0};
+	vector<int> endColor{255,0,0};	
 	if(value >= 255)
 		return endColor;
 	else if(value <= 0)
 		return startColor;
 
-	int r=endColor[0]-startColor[0];
-	int g=endColor[1]-startColor[1];
-	int b=endColor[2]-startColor[2];
+	int r_gap=endColor[0]-startColor[0];
+	int g_gap=endColor[1]-startColor[1];
+	int b_gap=endColor[2]-startColor[2];
 	
 	// int nSteps = max(abs(r), max(abs(g), abs(b)));
 	// if (nSteps < 1) nSteps = 1;
 	int nSteps = 255;
 	// Calculate the step size for each color
-	float rStep=r/(float)nSteps;
-	float gStep=g/(float)nSteps;
-	float bStep=b/(float)nSteps;
+	float rStep=r_gap/(float)nSteps;
+	float gStep=g_gap/(float)nSteps;
+	float bStep=b_gap/(float)nSteps;
 
 	// Reset the colors to the starting position
 	float fr=startColor[0];
-	float fg=startColor[0];
-	float fb=startColor[0];	
+	float fg=startColor[1];
+	float fb=startColor[2];	
 
 	// float step = (value - 255)/255;
 	int step = value;
@@ -487,15 +497,14 @@ void VisualizeCostCube(cv::Mat cost_map,geometry_msgs::Pose camera_pose){
 		cout << "CostCube map is empty." << endl;
 		return;
 	}
-	int center_voxel =  filter_radius / costcube_resolution;
 	visualization_msgs::MarkerArray markerArr;
 	visualization_msgs::Marker marker;
 	marker.header.frame_id = "map";
 	marker.header.stamp = ros::Time::now();
 	marker.ns = "";
-	marker.lifetime = ros::Duration(0.1);	
+	marker.lifetime = ros::Duration();	
 	marker.type = visualization_msgs::Marker::CUBE;
-	marker.action = visualization_msgs::Marker::ADD;
+	marker.action = visualization_msgs::Marker::MODIFY;
 	marker.pose.orientation.x = 0.0;
 	marker.pose.orientation.y = 0.0;
 	marker.pose.orientation.z = 0.0;
@@ -504,7 +513,23 @@ void VisualizeCostCube(cv::Mat cost_map,geometry_msgs::Pose camera_pose){
 	marker.scale.y = 0.8 * costcube_resolution;
 	marker.scale.z = 0.8 * costcube_resolution;
 	marker.color.a = 0.1; // Don't forget to set the alpha!
-	
+
+	visualization_msgs::MarkerArray markerTextArr;
+	visualization_msgs::Marker marker_text;
+	marker_text.header.frame_id = "map";
+	marker_text.header.stamp = ros::Time::now();
+	marker_text.ns = "";
+	marker_text.lifetime = ros::Duration();	
+	marker_text.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+	marker_text.action = visualization_msgs::Marker::MODIFY;
+	marker_text.pose.orientation.x = 0.0;
+	marker_text.pose.orientation.y = 0.0;
+	marker_text.pose.orientation.z = 0.0;
+	marker_text.pose.orientation.w = 1.0;
+	marker_text.scale.z = 0.3 * costcube_resolution;
+	marker_text.color.a = 1.0; // Don't forget to set the alpha!
+
+	vector<int> cam_posid{int(field_size / costcube_resolution),int(field_size / costcube_resolution),0};
 	int marker_id = 0;
 	for (int row = 0; row < cost_map.size[0]; ++row){
 		for (int col = 0; col < cost_map.size[1]; ++col){
@@ -512,21 +537,26 @@ void VisualizeCostCube(cv::Mat cost_map,geometry_msgs::Pose camera_pose){
 				int cur_cost =  cost_map.at<float>(row, col, hei);
 				// cout << "cur_cost:" << cur_cost << " ";
 				vector<int> color  = getColor(cur_cost);
-				marker.pose.position.x = camera_pose.position.x + (row - center_voxel) * costcube_resolution;
-				marker.pose.position.y = camera_pose.position.y + (col - center_voxel) * costcube_resolution;
-				marker.pose.position.z = camera_pose.position.z + (hei - center_voxel) * costcube_resolution;
+				marker.pose.position.x = camera_pose.position.x + (row - cam_posid[0]) * costcube_resolution;
+				marker.pose.position.y = camera_pose.position.y + (col - cam_posid[1]) * costcube_resolution;
+				marker.pose.position.z = camera_pose.position.z + (hei - cam_posid[2]) * costcube_resolution;
 				marker.color.r =  color[0];
 				marker.color.g = color[1];
 				marker.color.b = color[2];
 				marker.id = marker_id++;
 				markerArr.markers.push_back(marker);
+				marker_text.pose = marker.pose;
+				marker_text.text = to_string(cur_cost);
+				marker_text.id = marker_id - 1;
+				markerTextArr.markers.push_back(marker_text);
 			}
-			cout << endl;
+			// cout << endl;
 		}
-		cout << endl;
+		// cout << endl;
 	}
-	cout << endl << endl;
+	// cout << endl << endl;
 	vis_pub.publish(markerArr);
+	vis_text_pub.publish(markerTextArr);
 }
 
 inline bool isInteger(const std::string & s){

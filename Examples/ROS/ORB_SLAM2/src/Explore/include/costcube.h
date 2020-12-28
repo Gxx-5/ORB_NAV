@@ -41,7 +41,7 @@ public:
         static const unsigned char FREE_SPACE = 0;
         cv::Mat map_prob;
 
-        CostCube(double radius,double res);
+        CostCube(double focal_len,double field_size,double resolution);
         cv::Mat calCostCubeByBresenham3D(vector<geometry_msgs::Point> map_points,geometry_msgs::Pose camera_pose);
         cv::Mat calCostCubeByDistance(vector<geometry_msgs::Point> map_points,geometry_msgs::Pose camera_pose);
         void processMapPts(const std::vector<geometry_msgs::Point> &pts, const geometry_msgs::Point &cam_pos,bool cal_occupied_only=false);
@@ -51,14 +51,17 @@ public:
         float dstFromVoxelToObstacle(vector<int> pos_id);
 
 private:
-        double filter_radius;
+        double field_size;
+        double focal_len;
+        double filter_radius = 1.0;
         double resoluion;
-        int voxel_n;
+        // int voxel_nxy;
+        // int voxel_nz;
         int size[3];
         cv::Mat occupied_counter, visit_counter;
         vector<vector<int>> occupied_ind;
         int free_thresh = 5;
         int occupied_thresh = 5;
-        double inscribed_radius_ = 0.18;
+        double inscribed_radius_ = 0.01;
         double cost_scaling_factor = 10.0;
 };
