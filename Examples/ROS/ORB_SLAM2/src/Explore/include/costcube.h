@@ -1,8 +1,8 @@
-#include<ros/ros.h>
+#include <ros/ros.h>
 #include "geometry_msgs/Pose.h"
 #include "geometry_msgs/Point.h"
 #include <opencv2/core/core.hpp>
-#include<opencv2/viz.hpp>
+#include <opencv2/viz.hpp>
 
 using namespace std;
 
@@ -41,14 +41,13 @@ public:
         CostCube(double focal_len,double field_size,double resolution);
         CostCube(){}
         void reinitialize(double focal_len,double field_size,double resolution);
-        cv::Mat calCostCubeByBresenham3D(vector<geometry_msgs::Point> map_points,geometry_msgs::Pose camera_pose);
-        cv::Mat calCostCubeByDistance(vector<geometry_msgs::Point> map_points,geometry_msgs::Pose camera_pose);
-        void processMapPts(const std::vector<geometry_msgs::Point> &pts, const geometry_msgs::Point &cam_pos,bool cal_occupied_only=false);
-        void Bresenham3D(const geometry_msgs::Point &pt_pos, cv::Mat &occupied,
-				  cv::Mat &visited,const geometry_msgs::Point &cam_pos,bool cal_occupied_only=false);
+        cv::Mat calCostCubeByBresenham3D(vector<geometry_msgs::Point> map_points);
+        cv::Mat calCostCubeByDistance(vector<geometry_msgs::Point> map_points);
+        void processMapPts(const std::vector<geometry_msgs::Point> &pts,bool cal_occupied_only=false);
+        void Bresenham3D(const geometry_msgs::Point &pt_pos, cv::Mat &occupied,cv::Mat &visited,bool cal_occupied_only=false);
         float computeCostByDistance(const float distance);
         float dstFromVoxelToObstacle(vector<int> pos_id);
-        float dstFromVoxelToObstacle(vector<int> pos_id,vector<geometry_msgs::Point> map_points,geometry_msgs::Pose camera_pose);
+        float dstFromVoxelToObstacle(vector<int> pos_id,vector<geometry_msgs::Point> map_points);
 
 private:
         double field_size = 0.15;

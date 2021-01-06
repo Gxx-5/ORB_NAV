@@ -16,11 +16,11 @@ void CostCube::reinitialize(double focal_len,double field_size,double resolution
         size[2] = focal_len / resolution;
 }
 
-cv::Mat CostCube::calCostCubeByBresenham3D(vector<geometry_msgs::Point> map_points,geometry_msgs::Pose camera_pose){
+cv::Mat CostCube::calCostCubeByBresenham3D(vector<geometry_msgs::Point> map_points){
         map_prob = cv::Mat::zeros(3,size,CV_8UC1);
         if(map_points.size()==0)
                 return map_prob;
-        processMapPts(map_points,camera_pose.position);
+        processMapPts(map_points);
         //cost = exp(-1.0 * cost_scaling_factor * (distance_from_obstacle – inscribed_radius)) * (costmap_2d::INSCRIBED_INFLATED_OBSTACLE – 1)
         int maxVisitNum = *max_element(visit_counter.begin<int>(),visit_counter.end<int>());
         for (int row = 0; row < size[0]; ++row)
@@ -52,7 +52,7 @@ cv::Mat CostCube::calCostCubeByBresenham3D(vector<geometry_msgs::Point> map_poin
         return map_prob;
 }
 
-void CostCube::processMapPts(const std::vector<geometry_msgs::Point> &pts, const geometry_msgs::Point &cam_pos,bool cal_occupied_only){
+void CostCube::processMapPts(const std::vector<geometry_msgs::Point> &pts,bool cal_occupied_only){
         occupied_counter = cv::Mat::zeros(3,size,CV_32SC1);
 	visit_counter = cv::Mat::zeros(3,size,CV_32SC1);
         // unsigned int end_id = start_id + n_pts;
@@ -61,17 +61,16 @@ void CostCube::processMapPts(const std::vector<geometry_msgs::Point> &pts, const
         // int num;
         for (unsigned int pt_id = 0; pt_id < pts.size(); ++pt_id)
         {
-                double dst = sqrt(pow((pts[pt_id].x-cam_pos.x),2)+pow((pts[pt_id].y-cam_pos.y),2)+pow((pts[pt_id].z-cam_pos.z),2));
+                double dst = sqrt(pow((pts[pt_id].x),2)+pow((pts[pt_id].y),2)+pow((pts[pt_id].z),2));
                 if(dst > focal_len)
                         continue;
-                Bresenham3D(pts[pt_id], occupied_counter, visit_counter,cam_pos,cal_occupied_only);
+                Bresenham3D(pts[pt_id], occupied_counter, visit_counter,cal_occupied_only);
                 // num++;
         }
         // cout << "size of occupied_ind after Bresenham3D algorithm: " << occupied_ind.size() << " , while size of map_points is " << pts.size() << endl;
 }
 
-void CostCube::Bresenham3D(const geometry_msgs::Point &pt_pos, cv::Mat &occupied,
-				  cv::Mat &visited,const geometry_msgs::Point &cam_pos,bool cal_occupied_only){
+void CostCube::Bresenham3D(const geometry_msgs::Point &pt_pos, cv::Mat &occupied,cv::Mat &visited,bool cal_occupied_only){
         // https://gist.github.com/yamamushi/5823518#file-bresenham3d-L11
         // int x1 = int(size[0]/2);
         // int y1 = int(size[1]/2);
@@ -82,9 +81,9 @@ void CostCube::Bresenham3D(const geometry_msgs::Point &pt_pos, cv::Mat &occupied
         int x1 = int(size[0]/2);
         int y1 = int(size[1]/2);
         int z1 = 0;
-        int x2 = int((pt_pos.x - cam_pos.x)/resolution + x1);
-        int y2 = int((pt_pos.y - cam_pos.y)/resolution + y1);
-        int z2 = int((pt_pos.z - cam_pos.z)/resolution  + z1);
+        int x2 = int((pt_pos.x )/resolution + x1);
+        int y2 = int((pt_pos.y )/resolution + y1);
+        int z2 = int((pt_pos.z )/resolution  + z1);
 	if (x2 < 0 || x2 >= size[0]||y2 < 0 || y2 >= size[1]||z2 < 0 || z2 >= size[2]){
                 cout << "Target index [ "<< x2 << " , " << y2 << " , " << z2 << " ] out of bound [" << size[0] << " , " 
                           << size[1] << " , " << size[2]  << "](maximum) when calculating Bresenham3D" << endl;
@@ -171,19 +170,19 @@ void CostCube::Bresenham3D(const geometry_msgs::Point &pt_pos, cv::Mat &occupied
         }
 }
 
-cv::Mat CostCube::calCostCubeByDistance(vector<geometry_msgs::Point> map_points,geometry_msgs::Pose camera_pose){
+cv::Mat CostCube::calCostCubeByDistance(vector<geometry_msgs::Point> map_points){
         map_prob = cv::Mat::zeros(3,size,CV_32FC1);
         dst_mat = cv::Mat::zeros(3,size,CV_32FC1);
         occupied_ind.clear();
         if(map_points.size()==0)
                 return map_prob;
-        processMapPts(map_points,camera_pose.position,true);
+        processMapPts(map_points,true);
         for (int row = 0; row < size[0]; ++row)
 		for (int col = 0; col < size[1]; ++col)		
                         for (int hei = 0;hei < size[2]; ++ hei){
                                 // TODO : Maybe need normalization?
                                 // float dst = dstFromVoxelToObstacle(vector<int>{row,col,hei});
-                                float dst = dstFromVoxelToObstacle(vector<int>{row,col,hei},map_points,camera_pose);
+                                float dst = dstFromVoxelToObstacle(vector<int>{row,col,hei},map_points);
                                 dst_mat.at<float>(row, col, hei) = dst;
                                 if(dst == -1)//something wrong happen,dont change map_prob
                                         return map_prob;
@@ -220,16 +219,16 @@ float CostCube::dstFromVoxelToObstacle(vector<int> pos_id){
         return dst/i;
 }
 
-float CostCube::dstFromVoxelToObstacle(vector<int> pos_id,vector<geometry_msgs::Point> map_points,geometry_msgs::Pose camera_pose){
+float CostCube::dstFromVoxelToObstacle(vector<int> pos_id,vector<geometry_msgs::Point> map_points){
 //Calculate average distance between current voxel and all map points in the field of view. 
         if(pos_id.size()!=3){
                 cout << "Wrong dim of voxel index has been input!";
                 return -1;
         }
         vector<float> dst_vec;
-        float x = camera_pose.position.x + (pos_id[0] - size[0]/2) * resolution;
-        float y = camera_pose.position.y + (pos_id[1] - size[1]/2) * resolution;
-        float z = camera_pose.position.z + (pos_id[2] - size[2]/2) * resolution;
+        float x = (pos_id[0] - size[0]/2) * resolution;
+        float y = (pos_id[1] - size[1]/2) * resolution;
+        float z = (pos_id[2] - size[2]/2) * resolution;
         for(uint i=0;i<map_points.size();++i){
                 float dst = sqrt(pow(map_points[i].x - x , 2) + pow(map_points[i].y - y , 2) + pow(map_points[i].z-z , 2));
                 dst_vec.push_back(dst);

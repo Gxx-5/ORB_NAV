@@ -5,14 +5,10 @@
 #include <iostream>
 #include "tf/transform_datatypes.h"//转换函数头文件
 
-using namespace ros;
-
-
-
+// using namespace ros;
+/** old code 
 // tf::StampedTransform map2odom_;
 tf::Transform map2odom_;
-
-
 void gridPoseCallback(const geometry_msgs::PoseStamped grid_pose)
 {
 
@@ -65,25 +61,57 @@ void gridPoseCallback(const geometry_msgs::PoseStamped grid_pose)
 	// ros::Duration(1.0).sleep();
 	}
 }
+**/
 
+static geometry_msgs::Pose _pose;
+
+void PoseStampedCallback(geometry_msgs::PoseStamped pose){
+	_pose = pose.pose;
+}
+
+void PoseCallback(geometry_msgs::Pose pose){
+	_pose = pose;
+}
 
 int main(int argc, char** argv){
-    ros::init(argc, argv, "map2odom_Node");    
-    ros::NodeHandle n;
-
-	map2odom_ = tf::Transform(tf::Quaternion(0,0,0,1),
-		   	 							tf::Vector3(0,0,0));
-
+	ros::init(argc, argv, "EstablishTF_node");    
+	ros::NodeHandle n;
+	if(argc < 4){
+		std::cout << "Too few input parameters , need at least 3 parameters.(parent_frame,child_frame,pose_name)"<< std::endl;
+		return 0;
+	}
+	std::string parent_frame = argv[1];
+	std::string child_frame = argv[2];
+	std::string pose_name = argv[3];
+	int rate = 1;
+	if(argc > 4)
+		rate = atoi(argv[4]);
+	
+	ros::Subscriber pose_sub = n.subscribe(pose_name, 5, PoseCallback);
+	tf::Transform transform = 
+		tf::Transform(tf::Quaternion(_pose.orientation.x, _pose.orientation.y, _pose.orientation.z, _pose.orientation.w),
+						tf::Vector3(_pose.position.x, _pose.position.y,_pose.position.z));
 	tf::TransformBroadcaster broadcaster;
-    ros::Subscriber gridpose_sub = n.subscribe("/grid_pose", 5, gridPoseCallback);
-    //发送消息的频率为2Hz， 1秒发2个，周期为500ms
-    ros::Rate loop_rate(100);
-    while(ok()){
-        broadcaster.sendTransform(tf::StampedTransform(map2odom_,ros::Time::now(),"map", "odom"));
-		printf("map2odom_\n%f,%f,%f\n%f,%f,%f\n",map2odom_.getRotation()[0],map2odom_.getRotation()[1],map2odom_.getRotation()[2],map2odom_.getOrigin()[0],map2odom_.getOrigin()[1],map2odom_.getOrigin()[2]);									  
-         //靠sleep()函数保证连续两个消息之间的时间恰好为一个周期
-	    ros::spinOnce();
-		loop_rate.sleep();		
-    }
-    return 0;
+	ros::Rate loop_rate(rate);
+	while(ros::ok()){
+		broadcaster.sendTransform(tf::StampedTransform(transform,ros::Time::now(),parent_frame, child_frame));
+		// printf("map2odom_\n%f,%f,%f\n%f,%f,%f\n",transform.getRotation()[0],transform.getRotation()[1],transform.getRotation()[2],transform.getOrigin()[0],transform.getOrigin()[1],transform.getOrigin()[2]);									  
+		loop_rate.sleep();
+		ros::spinOnce();			
+	}
+	return 0;
+// 	map2odom_ = tf::Transform(tf::Quaternion(0,0,0,1),
+// 		   	 							tf::Vector3(0,0,0));
+
+// 	tf::TransformBroadcaster broadcaster;
+//     ros::Subscriber gridpose_sub = n.subscribe("/grid_pose", 5, gridPoseCallback);
+//     //发送消息的频率为2Hz， 1秒发2个，周期为500ms
+//     ros::Rate loop_rate(100);
+//     while(ok()){
+//         broadcaster.sendTransform(tf::StampedTransform(map2odom_,ros::Time::now(),"map", "odom"));
+// 		printf("map2odom_\n%f,%f,%f\n%f,%f,%f\n",map2odom_.getRotation()[0],map2odom_.getRotation()[1],map2odom_.getRotation()[2],map2odom_.getOrigin()[0],map2odom_.getOrigin()[1],map2odom_.getOrigin()[2]);									  
+//          //靠sleep()函数保证连续两个消息之间的时间恰好为一个周期
+// 	    ros::spinOnce();
+// 		loop_rate.sleep();		
+//     }    
 }

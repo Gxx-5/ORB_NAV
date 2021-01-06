@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(map2odom)
+project(EstablishTF)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -104,7 +104,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES map2odom
+#  LIBRARIES EstablishTF
 #  CATKIN_DEPENDS geometry_msgs roscpp tf
 #  DEPENDS system_lib
 )
@@ -122,7 +122,7 @@ include_directories(
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/map2odom.cpp
+#   src/${PROJECT_NAME}/EstablishTF.cpp
 # )
 
 ## Add cmake target dependencies of the library
@@ -133,7 +133,7 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-# add_executable(${PROJECT_NAME}_node src/map2odom_node.cpp)
+# add_executable(${PROJECT_NAME}_node src/EstablishTF_node.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -197,12 +197,12 @@ include_directories(
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_map2odom.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_EstablishTF.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
-add_executable(map2odom_Node src/map2odom.cpp)
-target_link_libraries(map2odom_Node ${catkin_LIBRARIES})
+add_executable(EstablishTF_Node src/EstablishTF.cpp)
+target_link_libraries(EstablishTF_Node ${catkin_LIBRARIES})
