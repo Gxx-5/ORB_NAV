@@ -24,14 +24,17 @@
 #include<fstream>
 #include<chrono>
 #include <time.h>
+#include <iomanip>
 
 #include<ros/ros.h>
 #include <cv_bridge/cv_bridge.h>
 #include "sensor_msgs/PointCloud2.h"
+#include "sensor_msgs/PointCloud.h"
 #include "geometry_msgs/PoseStamped.h"
 #include "geometry_msgs/PoseArray.h"
 #include "visualization_msgs/MarkerArray.h"
 #include "visualization_msgs/Marker.h"
+
 
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
@@ -54,6 +57,7 @@ ros::Publisher pub_cloud;
 ros::Publisher pub_map_cloud;
 ros::Publisher pub_cur_view_cloud;
 ros::Publisher vis_pub,vis_text_pub;
+ros::Publisher costcloud_pub;
 bool save_to_results = false;
 std::string image_topic = "/camera/image_raw";
 int all_pts_pub_gap = 0;
@@ -67,9 +71,10 @@ int pub_count = 0;
 double filter_radius = 0.5;
 double focal_len = 1.5;
 double field_size = 0.5;
-double costcube_resolution = 0.1;
+double resolution = 0.1;
 cv::Mat costcube_map;
-CostCube COSTCUBE(focal_len,field_size,costcube_resolution);
+
+CostCube COSTCUBE;
 
 void LoadImages(const string &strSequence, vector<string> &vstrImageFilenames,
 	vector<double> &vTimestamps);
@@ -80,6 +85,7 @@ void FilterNearbyPoint(ORB_SLAM2::Map* map,std::vector<float> CamPos);
 void PublishMapPointstoCloud(std::vector<ORB_SLAM2::MapPoint*> points,ros::Publisher publisher,
 								vector<geometry_msgs::Point>* points_pos = NULL);
 void VisualizeCostCube(cv::Mat cost_map,geometry_msgs::Pose camera_pose);
+void testColorfunc();
 
 class ImageGrabber{
 public:
@@ -116,15 +122,18 @@ int main(int argc, char **argv){
 	pub_cur_view_cloud = nodeHandler.advertise<sensor_msgs::PointCloud2>("cur_map_cloud", 1000);
 	vis_pub = nodeHandler.advertise<visualization_msgs::MarkerArray>("CostCube",10);
 	vis_text_pub = nodeHandler.advertise<visualization_msgs::MarkerArray>("CostCubeText",10);
+	costcloud_pub = nodeHandler.advertise<sensor_msgs::PointCloud>("costcloud", 50);
 	ros::Publisher pub_pts_and_pose = nodeHandler.advertise<geometry_msgs::PoseArray>("pts_and_pose", 1000);
 	ros::Publisher pub_all_kf_and_pts = nodeHandler.advertise<geometry_msgs::PoseArray>("all_kf_and_pts", 1000);
 	// ros::Publisher pub_cur_camera_pose = nodeHandler.advertise<geometry_msgs::Pose>("/cur_camera_pose", 1000);
 	 ros::Publisher pub_cur_camera_pose = nodeHandler.advertise<geometry_msgs::PoseStamped>("/cur_camera_pose", 1000);
 	//Param 
-	nodeHandler.getParam("focal_len",focal_len);
-	nodeHandler.getParam("field_size",field_size);
-	nodeHandler.getParam("resolution",costcube_resolution);
-	
+	nodeHandler.getParam("/Monopub/focal_len",focal_len);
+	nodeHandler.getParam("/Monopub/field_size",field_size);
+	nodeHandler.getParam("/Monopub/resolution",resolution);
+	cout << "focal_len: " << focal_len << " field_size: " << field_size << " resolution: " << resolution << endl;
+	COSTCUBE.reinitialize(focal_len,field_size,resolution);
+
 	if (read_from_topic) {
 		ImageGrabber igb(SLAM, pub_pts_and_pose, pub_all_kf_and_pts, pub_cur_camera_pose);
 		ros::Subscriber sub = nodeHandler.subscribe(image_topic, 1, &ImageGrabber::GrabImage, &igb);
@@ -397,7 +406,9 @@ void publish(ORB_SLAM2::System &SLAM, ros::Publisher &pub_pts_and_pose,
 	// vector<geometry_msgs::Point> nearby_points_pos;
 	// PublishMapPointstoCloud(nearby_points,pub_cur_map_cloud,&nearby_points_pos);
 	costcube_map = COSTCUBE.calCostCubeByDistance(map_points_pos,camera_pose);
+	// VisualizeCostCube(COSTCUBE.dst_mat,camera_pose);
 	VisualizeCostCube(costcube_map,camera_pose);
+	// testColorfunc();
 }
 
 void FilterNearbyPoint(ORB_SLAM2::Map* map,std::vector<float> CamPos){
@@ -439,7 +450,7 @@ void PublishMapPointstoCloud(std::vector<ORB_SLAM2::MapPoint*> points,ros::Publi
 		cv::Mat wp = points[pt_id - 1]->GetWorldPos();
 
 		if (wp.empty()) {
-			printf("World position for point %d is empty\n", pt_id);
+			// printf("World position for point %d is empty\n", pt_id);
 			continue;
 		}
 		if(points_pos){
@@ -449,7 +460,7 @@ void PublishMapPointstoCloud(std::vector<ORB_SLAM2::MapPoint*> points,ros::Publi
 			pt_pos.z = wp.at<float>(2);
 			points_pos->push_back(pt_pos);
 			pts_num++;
-		}		
+		}
 		map_cloud->push_back(pcl::PointXYZ(wp.at<float>(0), wp.at<float>(1), wp.at<float>(2)));
 		//printf("Done getting map point %d\n", pt_id);
 	}
@@ -464,7 +475,7 @@ void PublishMapPointstoCloud(std::vector<ORB_SLAM2::MapPoint*> points,ros::Publi
 
 vector<int> getColor(int value){
 	vector<int> startColor{0,255,0};
-	vector<int> endColor{255,0,0};	
+	vector<int> endColor{255,255,0};	
 	if(value >= 255)
 		return endColor;
 	else if(value <= 0)
@@ -483,13 +494,74 @@ vector<int> getColor(int value){
 	float bStep=b_gap/(float)nSteps;
 
 	// Reset the colors to the starting position
-	float fr=startColor[0];
-	float fg=startColor[1];
-	float fb=startColor[2];	
+	float rStart=startColor[0];
+	float gStart=startColor[1];
+	float bStart=startColor[2];	
 
 	// float step = (value - 255)/255;
 	int step = value;
-	return vector<int>{(int)(fr+rStep*step+0.5),(int)(fg+gStep*step+0.5),(int)(fb+bStep*step+0.5)};
+	int r = rStart + r_gap * value / 255;
+	int g = gStart + g_gap * value / 255;
+	int b = bStart + b_gap * value / 255;
+	float a = value / 255;
+	// cout << r << " " << g << " " << b << endl;
+	return vector<int>{r,g,b};
+	// return vector<int>{(int)(rStart+rStep*step+0.5),(int)(gStart+gStep*step+0.5),(int)(bStart+bStep*step+0.5)};
+}
+void testColorfunc(){
+	float resolution = 10.0/255;
+	visualization_msgs::MarkerArray markerArr;
+	visualization_msgs::MarkerArray markerTextArr;
+	visualization_msgs::Marker marker;
+	visualization_msgs::Marker marker_text;
+	marker.header.frame_id = "map";
+	marker.header.stamp = ros::Time::now();
+	marker.ns = "";
+	marker.lifetime = ros::Duration();	
+	marker.type = visualization_msgs::Marker::CUBE;
+	marker.action = visualization_msgs::Marker::MODIFY;
+	marker.pose.orientation.x = 0.0;
+	marker.pose.orientation.y = 0.0;
+	marker.pose.orientation.z = 0.0;
+	marker.pose.orientation.w = 1.0;
+	marker.scale.x = resolution;
+	marker.scale.y = resolution;
+	marker.scale.z = resolution;
+	marker.color.a = 1.0; // Don't forget to set the alpha!
+	int marker_id = 0;
+
+	marker_text.header.frame_id = "map";
+	marker_text.header.stamp = ros::Time::now();
+	marker_text.ns = "";
+	marker_text.lifetime = ros::Duration();	
+	marker_text.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+	marker_text.action = visualization_msgs::Marker::MODIFY;
+	marker_text.pose.orientation.x = 0.0;
+	marker_text.pose.orientation.y = 0.0;
+	marker_text.pose.orientation.z = 0.0;
+	marker_text.pose.orientation.w = 1.0;
+	marker_text.scale.z = resolution;
+	marker_text.color.a = 1.0; // Don't forget to set the alpha!!
+
+	for(int i =0; i<255;++i){
+		marker.pose.position.x = -5.0+i*resolution;
+		marker.pose.position.y = 0;
+		marker.pose.position.z = 0;
+		vector<int> color  = getColor(i);
+		marker.color.r =  color[0];
+		marker.color.g = color[1];
+		marker.color.b = color[2];
+		marker.id = marker_id++;
+		markerArr.markers.push_back(marker);
+		marker_text.pose = marker.pose;
+		string str = to_string(i) + ", " + to_string(color[0]) + ", " +  to_string(color[1]) + ", " +  to_string(color[2]);
+		marker_text.text = str;//to_string(i);
+		marker_text.id = marker_id - 1;
+		markerTextArr.markers.push_back(marker_text);
+	}
+	vis_pub.publish(markerArr);
+	vis_text_pub.publish(markerTextArr);
+	cout << "test done." << endl;
 }
 
 void VisualizeCostCube(cv::Mat cost_map,geometry_msgs::Pose camera_pose){
@@ -509,9 +581,9 @@ void VisualizeCostCube(cv::Mat cost_map,geometry_msgs::Pose camera_pose){
 	marker.pose.orientation.y = 0.0;
 	marker.pose.orientation.z = 0.0;
 	marker.pose.orientation.w = 1.0;
-	marker.scale.x = 0.8 * costcube_resolution;
-	marker.scale.y = 0.8 * costcube_resolution;
-	marker.scale.z = 0.8 * costcube_resolution;
+	marker.scale.x = 0.8 * resolution;
+	marker.scale.y = 0.8 * resolution;
+	marker.scale.z = 0.8 * resolution;
 	marker.color.a = 0.1; // Don't forget to set the alpha!
 
 	visualization_msgs::MarkerArray markerTextArr;
@@ -526,27 +598,31 @@ void VisualizeCostCube(cv::Mat cost_map,geometry_msgs::Pose camera_pose){
 	marker_text.pose.orientation.y = 0.0;
 	marker_text.pose.orientation.z = 0.0;
 	marker_text.pose.orientation.w = 1.0;
-	marker_text.scale.z = 0.3 * costcube_resolution;
-	marker_text.color.a = 1.0; // Don't forget to set the alpha!
+	marker_text.scale.z = 0.3 * resolution;
+	marker_text.color.a = 1.0; // Don't forget to set the alpha!!
 
-	vector<int> cam_posid{int(field_size / costcube_resolution),int(field_size / costcube_resolution),0};
+	vector<int> cam_posid{int(field_size / resolution),int(field_size / resolution),0};
+	// cout << int(field_size / resolution) << " " << cost_map.size[0] << endl;
 	int marker_id = 0;
 	for (int row = 0; row < cost_map.size[0]; ++row){
 		for (int col = 0; col < cost_map.size[1]; ++col){
                         for (int hei = 0;hei < cost_map.size[2]; ++ hei){
-				int cur_cost =  cost_map.at<float>(row, col, hei);
+				float cur_cost = cost_map.at<float>(row, col, hei);
+				// cur_cost = int(cur_cost*100)/100.0;
+				// cout << cur_cost;
 				// cout << "cur_cost:" << cur_cost << " ";
 				vector<int> color  = getColor(cur_cost);
-				marker.pose.position.x = camera_pose.position.x + (row - cam_posid[0]) * costcube_resolution;
-				marker.pose.position.y = camera_pose.position.y + (col - cam_posid[1]) * costcube_resolution;
-				marker.pose.position.z = camera_pose.position.z + (hei - cam_posid[2]) * costcube_resolution;
+				marker.pose.position.x = camera_pose.position.x + (row - cam_posid[0]) * resolution;
+				marker.pose.position.y = camera_pose.position.y + (col - cam_posid[1]) * resolution;
+				marker.pose.position.z = camera_pose.position.z + (hei - cam_posid[2]) * resolution;
 				marker.color.r =  color[0];
 				marker.color.g = color[1];
 				marker.color.b = color[2];
 				marker.id = marker_id++;
 				markerArr.markers.push_back(marker);
 				marker_text.pose = marker.pose;
-				marker_text.text = to_string(cur_cost);
+				marker_text.text = to_string(cur_cost).substr(0,4);
+				// cout << to_string(cur_cost).substr(0,4);
 				marker_text.id = marker_id - 1;
 				markerTextArr.markers.push_back(marker_text);
 			}
@@ -557,6 +633,31 @@ void VisualizeCostCube(cv::Mat cost_map,geometry_msgs::Pose camera_pose){
 	// cout << endl << endl;
 	vis_pub.publish(markerArr);
 	vis_text_pub.publish(markerTextArr);
+
+	sensor_msgs::PointCloud cloud;
+	int num_points = cost_map.size[0]*cost_map.size[1]*cost_map.size[2];
+	cloud.header.stamp = ros::Time::now();
+    	cloud.header.frame_id = "map";//填充 PointCloud 消息的头：frame 和 timestamp．
+    	cloud.points.resize(num_points);//设置点云的数量．
+ 
+    	//增加信道 "intensity" 并设置其大小，使与点云数量相匹配．
+    	cloud.channels.resize(1);
+    	cloud.channels[0].name = "intensities";
+    	cloud.channels[0].values.resize(num_points);
+
+	//使用虚拟数据填充 PointCloud 消息．同时，使用虚拟数据填充 intensity 信道．
+	int i = 0;
+    	for (int row = 0; row < cost_map.size[0]; ++row)
+		for (int col = 0; col < cost_map.size[1]; ++col)
+                        for (int hei = 0;hei < cost_map.size[2]; ++ hei){
+				cloud.points[i].x = camera_pose.position.x + (row - cam_posid[0]) * resolution;
+				cloud.points[i].y = camera_pose.position.y + (col - cam_posid[1]) * resolution;
+				cloud.points[i].z = camera_pose.position.z + (hei - cam_posid[2]) * resolution;
+				float cur_cost = cost_map.at<float>(row, col, hei);
+				cloud.channels[0].values[i] = int(cur_cost*100);
+				i++;
+    			}
+    costcloud_pub.publish(cloud);
 }
 
 inline bool isInteger(const std::string & s){

@@ -39,7 +39,7 @@ using namespace std;
 const double PI = 3.14159265358979323846; /* pi */
 
 // parameters
-float scale_factor = 0.1;//3
+float scale_factor = 1;//3
 float resize_factor = 0.1;//5
 float cloud_max_x = 60;//10;
 float cloud_min_x = -60;//-10.0;
@@ -53,7 +53,7 @@ int visit_thresh = 0;
 float thresh_diff = 0.01;
 float upper_left_x = -1.5;
 float upper_left_y = -2.5;
-const int resolution = 10;
+float resolution = 0.02;//resolution of map const int resolution = 10;
 
 
 float grid_max_x, grid_min_x, grid_max_z, grid_min_z;
@@ -130,7 +130,7 @@ int main(int argc, char **argv)
 	ros::init(argc, argv, "VRobot");
 	ros::start();
 
-	printf("Input %d params\n", argc - 1);
+	printf("VRobot:Input %d params\n", argc - 1);
 	parseParams(argc, argv);
 	printParams();
 
@@ -144,16 +144,18 @@ int main(int argc, char **argv)
 		param_str = oss.str();
 	}
 
-	grid_max_x = cloud_max_x * scale_factor;
-	grid_min_x = cloud_min_x * scale_factor;
-	grid_max_z = cloud_max_z * scale_factor;
-	grid_min_z = cloud_min_z * scale_factor;
+	grid_max_x = 5;//cloud_max_x * scale_factor;
+	grid_min_x = -5;//cloud_min_x * scale_factor;
+	grid_max_z = 5;//cloud_max_z * scale_factor;
+	grid_min_z = -5;//cloud_min_z * scale_factor;
 	printf("grid_max: %f, %f\t grid_min: %f, %f\n", grid_max_x, grid_max_z, grid_min_x, grid_min_z);
 
 	double grid_res_x = grid_max_x - grid_min_x, grid_res_z = grid_max_z - grid_min_z;
 
-	h = grid_res_z;
-	w = grid_res_x;
+	// h = grid_res_z;
+	// w = grid_res_x;	
+	h = 1 / resolution * (grid_max_x - grid_min_x) ;
+	w = 1 / resolution * (grid_max_z - grid_min_z);
 	printf("grid_size: (%d, %d)\n", h, w);
 	n_kf_received = 0;
 
@@ -165,7 +167,7 @@ int main(int argc, char **argv)
 	grid_map_msg.data.resize(h * w);
 	grid_map_msg.info.width = w;
 	grid_map_msg.info.height = h;
-	grid_map_msg.info.resolution = 1.0 / scale_factor;
+	grid_map_msg.info.resolution = resolution; //1.0 / scale_factor;
 
 	grid_map_int = cv::Mat(h, w, CV_8SC1, (char *)(grid_map_msg.data.data()));
 
@@ -180,8 +182,8 @@ int main(int argc, char **argv)
 	local_visit_counter.create(h, w, CV_32SC1);
 	local_map_pt_mask.create(h, w, CV_8UC1);
 
-	norm_factor_x = float(grid_res_x - 1) / float(grid_max_x - grid_min_x);
-	norm_factor_z = float(grid_res_z - 1) / float(grid_max_z - grid_min_z);
+	norm_factor_x = 1.0/resolution;//float(grid_res_x - 1) / float(grid_max_x - grid_min_x);
+	norm_factor_z = 1.0/resolution;//float(grid_res_z - 1) / float(grid_max_z - grid_min_z);
 	printf("norm_factor_x: %f\n", norm_factor_x);
 	printf("norm_factor_z: %f\n", norm_factor_z);
 
@@ -221,13 +223,13 @@ int main(int argc, char **argv)
 	cv::setMouseCallback("grid_map_thresh", onMouseHandle);
 
 	tf::TransformBroadcaster broadcaster;
-	ros::Rate loop_rate(1);
+	ros::Rate loop_rate(100);
 	while(ros::ok()){
 		ros::Time now = ros::Time::now();
 		pub_pose.publish(curpose);
 		tf::Transform map2odom = getmap2odom(curpose);
 		broadcaster.sendTransform(tf::StampedTransform(map2odom,now,"map", "odom"));
-		printf("[%lf] send transform from map to odom!\n",ros::Time::now());
+		printf("[%lf] send transform from map to odom!\n",now.toSec());
 		ros::spinOnce();
 		loop_rate.sleep();
 	}
@@ -605,7 +607,8 @@ void updateGridMap(const geometry_msgs::PoseArray::ConstPtr &pts_and_pose)
 	kf_pos_grid_x = int(floor((kf_pos_x - grid_min_x) * norm_factor_x));
 	kf_pos_grid_z = int(floor((kf_pos_z - grid_min_z) * norm_factor_z));
 	if (kf_pos_grid_x < 0 || kf_pos_grid_x >= w){
-		printf("kf_pos_grid_x out of bound!");
+		cout << "kf_pos_grid_x " << kf_pos_grid_x << " kf_pos_x " << kf_pos_x << endl;
+		printf("kf_pos_grid_x out of bound!\n");
 		return;
 	}
 	if (kf_pos_grid_z < 0 || kf_pos_grid_z >= h){
@@ -627,23 +630,84 @@ void updateGridMap(const geometry_msgs::PoseArray::ConstPtr &pts_and_pose)
 	oy = kf_orientation.y;
 	oz = kf_orientation.z;
 	ow = kf_orientation.w;
+
+		// Eigen::Matrix3d R;
+// 	R << 
+// 	1-2*oy*oy-2*oz*oz, 	2*ox*oy+2*ow*oz, 	2*ox*oz-2*ow*oy,
+// 	2*ox*oy-2*ow*oz, 	1-2*ox*ox-2*oz*oz, 	2*oy*oz+2*ow*ox,
+// 	2*ox*oz+2*ow*oy, 	2*oy*oz-2*ow*ox, 	1-2*ox*ox-2*oy*oy;
+
+//   tf::Matrix3x3 tf_camera_rotation (R.at<float> (0,0), R.at<float> (0,1), R.at<float> (0,2),
+//                                     R.at<float> (1,0), R.at<float> (1,1), R.at<float> (1,2),
+//                                     R.at<float> (2,0), R.at<float> (2,1), R.at<float> (2,2)
+//                                    );
+//   const tf::Matrix3x3 tf_orb_to_ros (0, 0, 1,
+//                                     -1, 0, 0,
+//                                      0,-1, 0);
+
+//   //Transform from orb coordinate system to ros coordinate system on camera coordinates
+//   tf_camera_rotation = tf_orb_to_ros*tf_camera_rotation;
+// //   tf_camera_translation = tf_orb_to_ros*tf_camera_translation;
+
+//   //Inverse matrix
+//   tf_camera_rotation = tf_camera_rotation.transpose();
+// //   tf_camera_translation = -(tf_camera_rotation*tf_camera_translation);
+
+//   //Transform from orb coordinate system to ros coordinate system on map coordinates
+//   tf_camera_rotation = tf_orb_to_ros*tf_camera_rotation;
+//   tf_camera_translation = tf_orb_to_ros*tf_camera_translation;
+
+
 	Eigen::Matrix3d R;
 	R << 
 	1-2*oy*oy-2*oz*oz, 	2*ox*oy+2*ow*oz, 	2*ox*oz-2*ow*oy,
 	2*ox*oy-2*ow*oz, 	1-2*ox*ox-2*oz*oz, 	2*oy*oz+2*ow*ox,
 	2*ox*oz+2*ow*oy, 	2*oy*oz-2*ow*ox, 	1-2*ox*ox-2*oy*oy;
 	// // 相机坐标系 to ROS系
+
+
+
 	Eigen::Matrix3d T;
 	T <<
 	0,  0, 1,
-	-1,  0, 0,
-	0, -1, 0;
+	0, -1, 0,
+	-1, 0, 0;
 	R = T * R;
-	T <<
+
+	// Eigen::Matrix3d T,TR;
+	// T <<
+	// 0,  0, 1,
+	// -1, 0, 0,
+	// 0, -1, 0;
+	// R = T * R;
+	// R = R.inverse();
+	// R = T*R;
+	// TR <<
+	// 1,  0, 0,
+	// 0, 0, 1,
+	// 0, -1, 0;
+	// R=TR*R;
+
+	// kinect rgbd camera
+	T << 
 	1,  0, 0,
-	0,  0, -1,
-	0, -1, 0;
+	0,  0, 1,
+	0, 1, 0;	
 	R = T * R;
+		T <<
+	1,  0, 0,
+	0, 0, -1,
+	0, 1, 0;
+	R=T*R;
+
+	// T << 
+	// 0,  0, -1,
+	// 0,  1, 0,
+	// 1, 0, 0;	
+	// R = T * R;
+
+	// R = R.inverse();
+	// R = T*R;
 	// 旋转矩阵转四元数
 	Eigen::Quaterniond Q( R );
 	// 注意以xz面为地图xy平面
@@ -651,6 +715,9 @@ void updateGridMap(const geometry_msgs::PoseArray::ConstPtr &pts_and_pose)
 	curpose.pose.orientation.y = Q.z();
 	curpose.pose.orientation.z = Q.y();
 	curpose.pose.orientation.w = Q.w();
+	Eigen::Vector3d rpy = R.eulerAngles(0,1,2);
+	// cout << "Euler Angles of camera pose:\n" << rpy[0]/3.14*180 << " " << rpy[1]/3.14*180 << " " << rpy[2]/3.14*180 << endl;
+	// cout << "orientation: " << curpose.pose.orientation.x << " " << curpose.pose.orientation.y << " " << curpose.pose.orientation.z << " " << curpose.pose.orientation.w << endl;
 	// pub_pose.publish( curpose );
 	
 	++n_kf_received;
@@ -947,6 +1014,10 @@ void parseParams(int argc, char **argv)
 	int arg_id = 1;
 	if (argc > arg_id)
 	{
+		resolution = atof(argv[arg_id++]);
+	}
+	if (argc > arg_id)
+	{
 		scale_factor = atof(argv[arg_id++]);
 	}
 	if (argc > arg_id)
@@ -998,6 +1069,7 @@ void printParams()
 	printf("occupied_thresh: %f\n", occupied_thresh);
 	printf("use_local_counters: %d\n", use_local_counters);
 	printf("visit_thresh: %d\n", visit_thresh);
+	printf("resolution: %f\n", resolution);
 }
 
 /*

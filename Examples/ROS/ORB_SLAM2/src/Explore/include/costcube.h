@@ -35,13 +35,12 @@ class CostCube
 public:
         // typedef vector<vector<vector<float>>> Cube;
         // typedef vector<vector<float>> cube_slice;
-        static const unsigned char NO_INFORMATION = 255;
-        static const unsigned char LETHAL_OBSTACLE = 254;
-        static const unsigned char INSCRIBED_INFLATED_OBSTACLE = 253;
-        static const unsigned char FREE_SPACE = 0;
         cv::Mat map_prob;
+        cv::Mat dst_mat;
 
         CostCube(double focal_len,double field_size,double resolution);
+        CostCube(){}
+        void reinitialize(double focal_len,double field_size,double resolution);
         cv::Mat calCostCubeByBresenham3D(vector<geometry_msgs::Point> map_points,geometry_msgs::Pose camera_pose);
         cv::Mat calCostCubeByDistance(vector<geometry_msgs::Point> map_points,geometry_msgs::Pose camera_pose);
         void processMapPts(const std::vector<geometry_msgs::Point> &pts, const geometry_msgs::Point &cam_pos,bool cal_occupied_only=false);
@@ -49,12 +48,13 @@ public:
 				  cv::Mat &visited,const geometry_msgs::Point &cam_pos,bool cal_occupied_only=false);
         float computeCostByDistance(const float distance);
         float dstFromVoxelToObstacle(vector<int> pos_id);
+        float dstFromVoxelToObstacle(vector<int> pos_id,vector<geometry_msgs::Point> map_points,geometry_msgs::Pose camera_pose);
 
 private:
-        double field_size;
-        double focal_len;
-        double filter_radius = 1.0;
-        double resoluion;
+        double field_size = 0.15;
+        double focal_len = 0.5;
+        double resolution = 0.05;
+        float occ_scale = 0.2;
         // int voxel_nxy;
         // int voxel_nz;
         int size[3];
