@@ -204,5 +204,5 @@ include_directories(
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
-add_executable(EstablishTF_Node src/EstablishTF.cpp)
+add_executable(EstablishTF_Node src/EstablishTfFromPose.cpp)
 target_link_libraries(EstablishTF_Node ${catkin_LIBRARIES})
