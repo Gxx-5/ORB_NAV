@@ -87,7 +87,7 @@ int main(int argc, char** argv){
 	if(argc > 4)
 		rate = atoi(argv[4]);
 	
-	ros::Subscriber pose_sub = n.subscribe(pose_name, 5, PoseCallback);
+	ros::Subscriber pose_sub = n.subscribe(pose_name, 5, PoseStampedCallback);
 	tf::Transform transform = 
 		tf::Transform(tf::Quaternion(_pose.orientation.x, _pose.orientation.y, _pose.orientation.z, _pose.orientation.w),
 						tf::Vector3(_pose.position.x, _pose.position.y,_pose.position.z));
@@ -100,9 +100,10 @@ int main(int argc, char** argv){
 		ros::spinOnce();			
 	}
 	return 0;
+}
+	/** old code
 // 	map2odom_ = tf::Transform(tf::Quaternion(0,0,0,1),
 // 		   	 							tf::Vector3(0,0,0));
-
 // 	tf::TransformBroadcaster broadcaster;
 //     ros::Subscriber gridpose_sub = n.subscribe("/grid_pose", 5, gridPoseCallback);
 //     //发送消息的频率为2Hz， 1秒发2个，周期为500ms
@@ -114,4 +115,4 @@ int main(int argc, char** argv){
 // 	    ros::spinOnce();
 // 		loop_rate.sleep();		
 //     }    
-}
+**/

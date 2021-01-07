@@ -76,7 +76,6 @@ ${LIBS}
 
 rosbuild_add_executable(Monopub
 src/ros_mono_pub.cc
-src/Explore/src/costcube.cc
 )
 
 target_link_libraries(Monopub
@@ -118,6 +117,15 @@ src/VRobot/Astar.cc
 )
 
 target_link_libraries(VRobot
+${LIBS}
+)
+
+# Node for CostCube Explore Node
+rosbuild_add_executable(Explore_Node
+src/Explore/src/costcube.cc
+src/Explore/src/CalCost.cc
+)
+target_link_libraries(Explore_Node
 ${LIBS}
 )
 

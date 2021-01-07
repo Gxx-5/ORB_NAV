@@ -47,7 +47,7 @@
 #include <opencv2/highgui/highgui_c.h>
 #include <opencv2/highgui/highgui.hpp>
 #include <Converter.h>
-#include "CalCost.h"
+// #include "CalCost.h"
 
 //! parameters
 bool read_from_topic = true, read_from_camera = false;
@@ -124,11 +124,11 @@ int main(int argc, char **argv){
 	// ros::Publisher pub_cur_camera_pose = nodeHandler.advertise<geometry_msgs::Pose>("/cur_camera_pose", 1000);
 	 ros::Publisher pub_cur_camera_pose = nodeHandler.advertise<geometry_msgs::PoseStamped>("/cur_camera_pose", 1000);
 	//Param 
-	nodeHandler.getParam("/Monopub/focal_len",focal_len);
-	nodeHandler.getParam("/Monopub/field_size",field_size);
-	nodeHandler.getParam("/Monopub/resolution",resolution);
-	cout << "focal_len: " << focal_len << " field_size: " << field_size << " resolution: " << resolution << endl;
-	init(focal_len,field_size,resolution,pub_cur_view_cloud,vis_pub,vis_text_pub,costcloud_pub);
+	// nodeHandler.getParam("/Monopub/focal_len",focal_len);
+	// nodeHandler.getParam("/Monopub/field_size",field_size);
+	// nodeHandler.getParam("/Monopub/resolution",resolution);
+	// cout << "focal_len: " << focal_len << " field_size: " << field_size << " resolution: " << resolution << endl;
+	// init(nodeHandler,focal_len,field_size,resolution);
 
 	if (read_from_topic) {
 		ImageGrabber igb(SLAM, pub_pts_and_pose, pub_all_kf_and_pts, pub_cur_camera_pose);
@@ -391,7 +391,7 @@ void publish(ORB_SLAM2::System &SLAM, ros::Publisher &pub_pts_and_pose,
 		//Modify Map points nearby camear by the way
 		// FilterNearbyPoint(SLAM.getMap(),std::vector<float>{twc.at<float>(0),twc.at<float>(1),twc.at<float>(2)});
 	}
-	mainProcess(SLAM,pub_cur_view_cloud,camera_pose);
+	// mainProcess(SLAM,pub_cur_view_cloud,camera_pose);
 }
 
 
