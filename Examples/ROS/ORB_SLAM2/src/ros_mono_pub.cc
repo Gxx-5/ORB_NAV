@@ -28,8 +28,9 @@
 
 #include<ros/ros.h>
 #include <cv_bridge/cv_bridge.h>
-#include "sensor_msgs/PointCloud2.h"
 #include "sensor_msgs/PointCloud.h"
+#include "sensor_msgs/PointCloud2.h"
+#include <sensor_msgs/point_cloud_conversion.h>
 #include "geometry_msgs/PoseStamped.h"
 #include "geometry_msgs/PoseArray.h"
 #include "visualization_msgs/MarkerArray.h"
@@ -113,8 +114,8 @@ int main(int argc, char **argv){
 	// Create SLAM system. It initializes all system threads and gets ready to process frames.
 	ORB_SLAM2::System SLAM(argv[1], argv[2], ORB_SLAM2::System::MONOCULAR, true);
 	ros::NodeHandle nodeHandler;
-	pub_cloud = nodeHandler.advertise<sensor_msgs::PointCloud2>("cloud_in", 1000);
-	pub_map_cloud = nodeHandler.advertise<sensor_msgs::PointCloud2>("map_cloud", 1000);
+	pub_cloud = nodeHandler.advertise<sensor_msgs::PointCloud>("/cur_kp_cloud", 1000);
+	// pub_map_cloud = nodeHandler.advertise<sensor_msgs::PointCloud2>("map_cloud", 1000);
 	// pub_cur_view_cloud = nodeHandler.advertise<sensor_msgs::PointCloud2>("cur_map_cloud", 1000);
 	// vis_pub = nodeHandler.advertise<visualization_msgs::MarkerArray>("CostCube",10);
 	// vis_text_pub = nodeHandler.advertise<visualization_msgs::MarkerArray>("CostCubeText",10);
@@ -122,7 +123,7 @@ int main(int argc, char **argv){
 	ros::Publisher pub_pts_and_pose = nodeHandler.advertise<geometry_msgs::PoseArray>("pts_and_pose", 1000);
 	ros::Publisher pub_all_kf_and_pts = nodeHandler.advertise<geometry_msgs::PoseArray>("all_kf_and_pts", 1000);
 	// ros::Publisher pub_cur_camera_pose = nodeHandler.advertise<geometry_msgs::Pose>("/cur_camera_pose", 1000);
-	 ros::Publisher pub_cur_camera_pose = nodeHandler.advertise<geometry_msgs::PoseStamped>("/cur_camera_pose", 1000);
+	ros::Publisher pub_cur_camera_pose = nodeHandler.advertise<geometry_msgs::PoseStamped>("/cur_camera_pose", 1000);
 	//Param 
 	// nodeHandler.getParam("/Monopub/focal_len",focal_len);
 	// nodeHandler.getParam("/Monopub/field_size",field_size);
@@ -357,7 +358,9 @@ void publish(ORB_SLAM2::System &SLAM, ros::Publisher &pub_pts_and_pose,
 
 		// printf("valid map pts: %lu\n", pt_array.poses.size()-1);				
 		// printf("ros_cloud size: %d x %d\n", ros_cloud.height, ros_cloud.width);
-		pub_cloud.publish(ros_cloud);
+		sensor_msgs::PointCloud ros_cloud1;
+		sensor_msgs::convertPointCloud2ToPointCloud(ros_cloud,ros_cloud1);
+		pub_cloud.publish(ros_cloud1);
 
 		pt_array.header.frame_id = "map";
 		pt_array.header.seq = frame_id + 1;
@@ -383,11 +386,11 @@ void publish(ORB_SLAM2::System &SLAM, ros::Publisher &pub_pts_and_pose,
 		camera_pose.orientation.z = q[2];
 		camera_pose.orientation.w = q[3];
 		
-		geometry_msgs::PoseStamped camera_poseStamped;
-		camera_poseStamped.pose = camera_pose;
-		camera_poseStamped.header.frame_id = "map";
-		camera_poseStamped.header.stamp = ros::Time::now();
-		pub_cur_camera_pose.publish(camera_poseStamped);
+		geometry_msgs::PoseStamped camera_posestamped;
+		camera_posestamped.pose = camera_pose;
+		camera_posestamped.header.frame_id = "map";
+		camera_posestamped.header.stamp = ros::Time::now();
+		pub_cur_camera_pose.publish(camera_posestamped);
 		//Modify Map points nearby camear by the way
 		// FilterNearbyPoint(SLAM.getMap(),std::vector<float>{twc.at<float>(0),twc.at<float>(1),twc.at<float>(2)});
 	}
