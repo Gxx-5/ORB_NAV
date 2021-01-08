@@ -115,6 +115,7 @@ int main(int argc, char **argv)
     // Stop all threads
     SLAM.Shutdown();
 
+/** close SaveMap command prompt
 	mkdir("results", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 
 	//SLAM.getMap()->Save("results/map_pts_out.obj");
@@ -131,7 +132,7 @@ int main(int argc, char **argv)
     cin >> IsSaveMap;  
     if(IsSaveMap == 'Y' || IsSaveMap == 'y')  
         SLAM.SaveMap("MapPointandKeyFrame.bin");
-	
+**/	
     ros::shutdown();
 
     return 0;
