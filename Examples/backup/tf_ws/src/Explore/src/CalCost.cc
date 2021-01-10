@@ -19,7 +19,7 @@
 using namespace std;
 
 // double filter_radius = 0.5;
-double focal_len = 1.0;
+double shooting_dst = 1.0;
 double field_size = 0.25;
 double resolution = 0.1;
 std::string cloud_name = "/map_cloud";
@@ -96,9 +96,9 @@ void poseCallback(const geometry_msgs::PoseStamped &pose){
 	Twc(2,0) = pose.pose.position.z;
 }
 
-// void init(ros::NodeHandle nodeHandler,double focal_len,double field_size,double resolution){
-//         COSTCUBE.reinitialize(focal_len,field_size,resolution);
-//         _focal_len = focal_len;
+// void init(ros::NodeHandle nodeHandler,double shooting_dst,double field_size,double resolution){
+//         COSTCUBE.reinitialize(shooting_dst,field_size,resolution);
+//         _focal_len = shooting_dst;
 //         _field_size = field_size;
 //         resolution = resolution;
 // 	_pub_cur_view_cloud = nodeHandler.advertise<sensor_msgs::PointCloud2>("cur_map_cloud", 1000);
@@ -449,7 +449,7 @@ void parseParams(int argc, char **argv)
 	int arg_id = 1;
 	if (argc > arg_id)
 	{
-		focal_len = atof(argv[arg_id++]);
+		shooting_dst = atof(argv[arg_id++]);
 	}
 	if (argc > arg_id)
 	{
@@ -472,7 +472,7 @@ void parseParams(int argc, char **argv)
 void printParams()
 {
 	printf("Using params:\n");
-	printf("focal_len: %f\n", focal_len);
+	printf("shooting_dst: %f\n", shooting_dst);
 	printf("field_size: %f\n", field_size);
 	printf("resolution: %f\n", resolution);
 	printf("cloud_topic_name: %s\n", cloud_name);

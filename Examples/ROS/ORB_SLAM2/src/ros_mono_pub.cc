@@ -69,7 +69,7 @@ cv::VideoCapture cap_obj;
 
 bool pub_all_pts = false;
 int pub_count = 0;
-double focal_len = 1.5;
+double shooting_dst = 1.5;
 double field_size = 0.5;
 double resolution = 0.1;
 
@@ -125,11 +125,11 @@ int main(int argc, char **argv){
 	// ros::Publisher pub_cur_camera_pose = nodeHandler.advertise<geometry_msgs::Pose>("/cur_camera_pose", 1000);
 	ros::Publisher pub_cur_camera_pose = nodeHandler.advertise<geometry_msgs::PoseStamped>("/cur_camera_pose", 1000);
 	//Param 
-	// nodeHandler.getParam("/Monopub/focal_len",focal_len);
+	// nodeHandler.getParam("/Monopub/shooting_dst",shooting_dst);
 	// nodeHandler.getParam("/Monopub/field_size",field_size);
 	// nodeHandler.getParam("/Monopub/resolution",resolution);
-	// cout << "focal_len: " << focal_len << " field_size: " << field_size << " resolution: " << resolution << endl;
-	// init(nodeHandler,focal_len,field_size,resolution);
+	// cout << "shooting_dst: " << shooting_dst << " field_size: " << field_size << " resolution: " << resolution << endl;
+	// init(nodeHandler,shooting_dst,field_size,resolution);
 
 	if (read_from_topic) {
 		ImageGrabber igb(SLAM, pub_pts_and_pose, pub_all_kf_and_pts, pub_cur_camera_pose);

@@ -1,19 +1,19 @@
 #include "costcube.h"
 
-CostCube::CostCube(double focal_len,double field_size,double resolution){
-        focal_len = focal_len;
+CostCube::CostCube(double shooting_dst,double field_size,double resolution){
+        shooting_dst = shooting_dst;
         field_size = field_size;
         resolution = resolution;
         size[0] = size[1] = 2 * field_size / resolution;
-        size[2] = focal_len / resolution;
+        size[2] = shooting_dst / resolution;
 }
 
-void CostCube::reinitialize(double focal_len,double field_size,double resolution){
-        focal_len = focal_len;
+void CostCube::reinitialize(double shooting_dst,double field_size,double resolution){
+        shooting_dst = shooting_dst;
         field_size = field_size;
         resolution = resolution;
         size[0] = size[1] = 2 * field_size / resolution;
-        size[2] = focal_len / resolution;
+        size[2] = shooting_dst / resolution;
 }
 
 cv::Mat CostCube::calCostCubeByBresenham3D(vector<geometry_msgs::Point> map_points){
@@ -62,7 +62,7 @@ void CostCube::processMapPts(const std::vector<geometry_msgs::Point> &pts,bool c
         for (unsigned int pt_id = 0; pt_id < pts.size(); ++pt_id)
         {
                 double dst = sqrt(pow((pts[pt_id].x),2)+pow((pts[pt_id].y),2)+pow((pts[pt_id].z),2));
-                if(dst > focal_len)
+                if(dst > shooting_dst)
                         continue;
                 Bresenham3D(pts[pt_id], occupied_counter, visit_counter,cal_occupied_only);
                 // num++;

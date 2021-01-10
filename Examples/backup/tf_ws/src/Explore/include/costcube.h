@@ -38,9 +38,9 @@ public:
         cv::Mat map_prob;
         cv::Mat dst_mat;
 
-        CostCube(double focal_len,double field_size,double resolution);
+        CostCube(double shooting_dst,double field_size,double resolution);
         CostCube(){}
-        void reinitialize(double focal_len,double field_size,double resolution);
+        void reinitialize(double shooting_dst,double field_size,double resolution);
         cv::Mat calCostCubeByBresenham3D(vector<geometry_msgs::Point> map_points);
         cv::Mat calCostCubeByDistance(vector<geometry_msgs::Point> map_points);
         void processMapPts(const std::vector<geometry_msgs::Point> &pts,bool cal_occupied_only=false);
@@ -51,7 +51,7 @@ public:
 
 private:
         double field_size = 0.15;
-        double focal_len = 0.5;
+        double shooting_dst = 0.5;
         double resolution = 0.05;
         float occ_scale = 0.2;
         // int voxel_nxy;
