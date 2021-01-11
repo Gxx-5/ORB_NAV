@@ -111,9 +111,7 @@ ${LIBS}
 
 # Node for VisualRobot
 rosbuild_add_executable(VRobot
-src/VRobot/ros_sub.cc
-src/VRobot/Astar.h
-src/VRobot/Astar.cc
+src/VRobot/GridmapNode.cc
 )
 
 target_link_libraries(VRobot
