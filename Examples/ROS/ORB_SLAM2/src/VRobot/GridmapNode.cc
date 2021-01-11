@@ -36,17 +36,11 @@ const double PI = 3.14159265358979323846; /* pi */
 float resolution = 0.02;//resolution of map
 float map_width = 10.0;//width of map
 float map_height = 10.0;//height of map
-
-float scale_factor = 1.0;
-float free_thresh = 0.55;
-float occupied_thresh = 0.50;
-unsigned int use_local_counters = 0;
-int visit_thresh = 0;
-
-float thresh_diff = 0.01;
-float upper_left_x = -1.5;
-float upper_left_y = -2.5;
-
+float free_thresh = 0.55;//boundary value to set grid free.
+float occupied_thresh = 0.50;//boundary value to set grid occupied.
+int visit_thresh = 0;//if grid's visits count lower than visit_thresh,the grid is set to uncertain.
+unsigned int use_local_counters = 0;//if 1,use new local mask in each process.otherwise,create a global mask cover the whole map.
+float scale_factor = 1.0;//the factor to scale grid coordinate.
 
 float map_rbound, map_lbound, map_ubound, map_bbound;
 cv::Mat global_occupied_counter, global_visit_counter;
@@ -66,8 +60,6 @@ int kf_pos_grid_x = 0, kf_pos_grid_z = 0;
 
 int g_camera_pos_grid_x = 0, g_camera_pos_grid_z = 0; //相机位置
 int g_camera_ori_grid_x = 0, g_camera_ori_grid_z = 0; //相机方向位置
-int g_target_x, g_target_z;
-bool g_target_is_set = false;
 
 std::string param_str;
 vector<vector<double>> kf_plantVec(0, vector<double>(3)); //关键帧平面的世界坐标集
@@ -83,7 +75,6 @@ vector<vector<double>> rotationMatrix = {
 geometry_msgs::PoseStamped curpose;
 
 std::mutex g_gridMapMutex;
-bool g_findpathRunning = true;
 
 void updateGridMap(const geometry_msgs::PoseArray::ConstPtr &pts_and_pose);
 void resetGridMap(const geometry_msgs::PoseArray::ConstPtr &pts_and_pose);
@@ -120,8 +111,9 @@ int main(int argc, char **argv)
 
 	{
 		const std::vector<float> params = {
-			scale_factor, free_thresh, occupied_thresh,
-			(float)use_local_counters, (float)visit_thresh};
+			resolution, map_width,map_height,
+			free_thresh,occupied_thresh,float(visit_thresh),
+			float(use_local_counters),scale_factor};
 		std::ostringstream oss;
 		std::copy(params.cbegin(), params.cend(), ostream_iterator<float>(oss, "_"));
 		param_str = oss.str();
@@ -632,7 +624,7 @@ void getGridMap()
 	//cv::resize(grid_map_thresh, grid_map_thresh_resized, grid_map_thresh_resized.size());
 	//grid_map_thresh_resized = grid_map_thresh.clone();
 }
-
+//input params: resolution, map_width,map_height,free_thresh,occupied_thresh,float(visit_thresh),float(use_local_counters),scale_factor
 void parseParams(int argc, char **argv)
 {
 	int arg_id = 1;
@@ -642,7 +634,11 @@ void parseParams(int argc, char **argv)
 	}
 	if (argc > arg_id)
 	{
-		scale_factor = atof(argv[arg_id++]);
+		map_width = atof(argv[arg_id++]);
+	}
+	if (argc > arg_id)
+	{
+		map_height = atof(argv[arg_id++]);
 	}
 	if (argc > arg_id)
 	{
@@ -650,27 +646,33 @@ void parseParams(int argc, char **argv)
 	}
 	if (argc > arg_id)
 	{
-		occupied_thresh = atof(argv[arg_id++]);
+		occupied_thresh = atoi(argv[arg_id++]);
 	}
 	if (argc > arg_id)
+	{
+		visit_thresh = atoi(argv[arg_id++]);
+	}
+		if (argc > arg_id)
 	{
 		use_local_counters = atoi(argv[arg_id++]);
 	}
 	if (argc > arg_id)
 	{
-		visit_thresh = atoi(argv[arg_id++]);
+		scale_factor = atoi(argv[arg_id++]);
 	}
 }
 
 void printParams()
 {
 	printf("Using params:\n");
-	printf("scale_factor: %f\n", scale_factor);
+	printf("resolution: %f\n", resolution);
+	printf("map_width: %f\n", map_width);
+	printf("map_height: %f\n", map_height);
 	printf("free_thresh: %f\n", free_thresh);
 	printf("occupied_thresh: %f\n", occupied_thresh);
-	printf("use_local_counters: %d\n", use_local_counters);
 	printf("visit_thresh: %d\n", visit_thresh);
-	printf("resolution: %f\n", resolution);
+	printf("use_local_counters: %d\n", use_local_counters);
+	printf("scale_factor: %f\n", scale_factor);
 }
 
 /*
