@@ -34,15 +34,10 @@ const double PI = 3.14159265358979323846; /* pi */
 
 // parameters
 float resolution = 0.02;//resolution of map
-float map_width = 10.0;
-float map_height = 10.0;
+float map_width = 10.0;//width of map
+float map_height = 10.0;//height of map
 
-float scale_factor = 1;//3
-float resize_factor = 0.1;//5
-float cloud_max_x = 60;//10;
-float cloud_min_x = -60;//-10.0;
-float cloud_max_z = 80;//16;
-float cloud_min_z = -25;//-5;
+float scale_factor = 1.0;
 float free_thresh = 0.55;
 float occupied_thresh = 0.50;
 unsigned int use_local_counters = 0;
@@ -75,7 +70,6 @@ int g_target_x, g_target_z;
 bool g_target_is_set = false;
 
 std::string param_str;
-
 vector<vector<double>> kf_plantVec(0, vector<double>(3)); //关键帧平面的世界坐标集
 
 vector<double> bestplane(3, 0);				//平面拟合 模型方程z=ax+by+c 法向量为[a,b,-1], [0]a [1]b [2]c
@@ -87,7 +81,6 @@ vector<vector<double>> rotationMatrix = {
 }; //旋转矩阵
 
 geometry_msgs::PoseStamped curpose;
-
 
 std::mutex g_gridMapMutex;
 bool g_findpathRunning = true;
@@ -127,8 +120,7 @@ int main(int argc, char **argv)
 
 	{
 		const std::vector<float> params = {
-			scale_factor, resize_factor, cloud_max_x, cloud_min_x,
-			cloud_max_z, cloud_min_z, free_thresh, occupied_thresh,
+			scale_factor, free_thresh, occupied_thresh,
 			(float)use_local_counters, (float)visit_thresh};
 		std::ostringstream oss;
 		std::copy(params.cbegin(), params.cend(), ostream_iterator<float>(oss, "_"));
@@ -158,23 +150,20 @@ int main(int argc, char **argv)
 
 	grid_map_int = cv::Mat(h, w, CV_8SC1, (char *)(grid_map_msg.data.data()));
 
-	//grid_map_proba.create(h, w, CV_8UC1);
-
 	grid_map.create(h, w, CV_32FC1);
 	grid_map_thresh.create(h, w, CV_8UC1);
-	//grid_map_thresh_resized.create(h * resize_factor, w * resize_factor, CV_8UC1);
 	//printf("output_size: (%d, %d)\n", grid_map_thresh_resized.rows, grid_map_thresh_resized.cols);
 
 	local_occupied_counter.create(h, w, CV_32SC1);
 	local_visit_counter.create(h, w, CV_32SC1);
 	local_map_pt_mask.create(h, w, CV_8UC1);
 
-	norm_factor_x = 1.0/resolution;//float(grid_res_x - 1) / float(map_rbound - map_lbound);
-	norm_factor_z = 1.0/resolution;//float(grid_res_z - 1) / float(map_ubound - map_bbound);
+	norm_factor_x = 1.0 / resolution;//float(grid_res_x - 1) / float(map_rbound - map_lbound);
+	norm_factor_z = 1.0 / resolution;//float(grid_res_z - 1) / float(map_ubound - map_bbound);
 	printf("norm_factor_x: %f\n", norm_factor_x);
 	printf("norm_factor_z: %f\n", norm_factor_z);
 
-
+	//初始化相机位资话题
 	curpose.header.seq = 0;
 	curpose.header.stamp = ros::Time::now();
 	curpose.header.frame_id = "map";
@@ -187,20 +176,13 @@ int main(int argc, char **argv)
 	curpose.pose.orientation.z = 0;
 	curpose.pose.orientation.w = 1;
 
-	// ros::Rate loop_rate(100);
-	
 	ros::NodeHandle nodeHandler;
 	ros::Subscriber sub_pts_and_pose = nodeHandler.subscribe("/pts_and_pose", 1000, ptCallback);
 	ros::Subscriber sub_all_kf_and_pts = nodeHandler.subscribe("/all_kf_and_pts", 1000, loopClosingCallback);
 	ros::Subscriber sub_cur_camera_pose = nodeHandler.subscribe("/cur_camera_pose", 1000, cameraPoseCallback);
-	
-	// ros::Subscriber sub_grid_pose = nodeHandler.subscribe("/grid_pose", 1000, gridPoseCallback);
-	
+
 	pub_grid_map = nodeHandler.advertise<nav_msgs::OccupancyGrid>("map", 1000);
 	pub_pose = nodeHandler.advertise<geometry_msgs::PoseStamped>("grid_pose", 1);
-	
-	// cv::namedWindow("grid_map_thresh", cv::WINDOW_AUTOSIZE);
-	cv::setMouseCallback("grid_map_thresh", onMouseHandle);
 
 	tf::TransformBroadcaster broadcaster;
 	ros::Rate loop_rate(100);
@@ -218,32 +200,7 @@ int main(int argc, char **argv)
 	cv::destroyAllWindows();
 	saveMap(time(NULL));
 
-	g_findpathRunning = false;
-
 	return 0;
-}
-
-void onMouseHandle(int event, int x, int y, int flags, void *param)
-{
-	switch (event)
-	{
-	case cv::EVENT_LBUTTONDOWN:
-		g_target_x = static_cast<int>(x / resize_factor);
-		g_target_z = static_cast<int>((h-y) / resize_factor);
-		if (g_target_x < 0 || g_target_x >= w ||
-			g_target_z < 0 || g_target_z >= h)
-		{
-			g_target_is_set = false;
-		}
-		else
-		{
-			g_target_is_set = true;
-		}
-		//printf("onMouseHandle: Set target: %d, %d (Current: %d, %d)\n",
-		//		int(g_target_x*resize_factor), int(g_target_z*resize_factor),
-		//		int(g_camera_pos_grid_x*resize_factor), int(g_camera_pos_grid_z*resize_factor));
-		break;
-	}
 }
 
 //publish tranform from map to odom . 
@@ -279,9 +236,6 @@ void cameraPoseCallback(const geometry_msgs::Pose::ConstPtr &cur_camera_pose)
 	const geometry_msgs::Point &location = cur_camera_pose->position;
 	const geometry_msgs::Quaternion &orientation = cur_camera_pose->orientation;
 
-	//const float camera_pos_x = location.x * scale_factor;
-	//const float camera_pos_z = location.z * scale_factor;
-
 	vector<double> curr_pt_before = {location.x, location.y, location.z};
 	auto curr_pt_after = RotationAjust(rotationMatrix, curr_pt_before); //旋转调整
 	const float camera_pos_x = curr_pt_after[0] * scale_factor;
@@ -307,12 +261,10 @@ void cameraPoseCallback(const geometry_msgs::Pose::ConstPtr &cur_camera_pose)
 
 	g_camera_ori_grid_x = g_camera_pos_grid_x + p3[0] * 10;
 	g_camera_ori_grid_z = g_camera_pos_grid_z + p3[2] * 10;
-
 }
 
 void saveMap(unsigned int id)
 {
-
 	cv::Mat grid_map_int_fliped, grid_map_thresh_fliped, grid_map_thresh_resized_fliped;
 	{
 		std::lock_guard<std::mutex> lock(g_gridMapMutex);
@@ -320,7 +272,6 @@ void saveMap(unsigned int id)
 		cv::flip(grid_map_thresh, grid_map_thresh_fliped, 0);
 		//cv::flip(grid_map_thresh_resized, grid_map_thresh_resized_fliped, 0);
 	}
-
 	printf("saving maps with id: %u\n", id);
 	mkdir("results", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 	if (id > 0)
@@ -336,86 +287,26 @@ void saveMap(unsigned int id)
 		//cv::imwrite("results/grid_map_thresh_resized_" + param_str + ".png", grid_map_thresh_resized_fliped);
 	}
 }
+
 void ptCallback(const geometry_msgs::PoseArray::ConstPtr &pts_and_pose)
 {
-	// ROS_INFO("Received points and pose: [%s]{%d}", pts_and_pose->header.frame_id.c_str(),pts_and_pose->header.seq);
-	//if (pts_and_pose->header.seq==0) {
-	//	cv::destroyAllWindows();
-	//	saveMap();
-	//	printf("Received exit message\n");
-	//	ros::shutdown();
-	//	exit(0);
-	//}
-	//	if (!got_start_time) {
-	//#ifdef COMPILEDWITHC11
-	//		start_time = std::chrono::steady_clock::now();
-	//#else
-	//		start_time = std::chrono::monotonic_clock::now();
-	//#endif
-	//		got_start_time = true;
-	//	}
 	if (loop_closure_being_processed)
 	{
 		return;
 	}
-
 	updateGridMap(pts_and_pose);
 
 	grid_map_msg.info.map_load_time = ros::Time::now();
 	pub_grid_map.publish(grid_map_msg);
 }
+
 void loopClosingCallback(const geometry_msgs::PoseArray::ConstPtr &all_kf_and_pts)
 {
-	//ROS_INFO("Received points and pose: [%s]{%d}", pts_and_pose->header.frame_id.c_str(),
-	//	pts_and_pose->header.seq);
-	//if (all_kf_and_pts->header.seq == 0) {
-	//	cv::destroyAllWindows();
-	//	saveMap();
-	//	ros::shutdown();
-	//	exit(0);
-	//}
 	cout << "loopClosingCallback" << time(NULL) << endl;
 	loop_closure_being_processed = true;
 	resetGridMap(all_kf_and_pts);
 	loop_closure_being_processed = false;
 }
-/*
-void getMixMax(const geometry_msgs::PoseArray::ConstPtr &pts_and_pose,
-			   geometry_msgs::Point &min_pt, geometry_msgs::Point &max_pt)
-{
-
-	min_pt.x = min_pt.y = min_pt.z = std::numeric_limits<double>::infinity();
-	max_pt.x = max_pt.y = max_pt.z = -std::numeric_limits<double>::infinity();
-	for (unsigned int i = 0; i < pts_and_pose->poses.size(); ++i)
-	{
-		const geometry_msgs::Point &curr_pt = pts_and_pose->poses[i].position;
-		if (curr_pt.x < min_pt.x)
-		{
-			min_pt.x = curr_pt.x;
-		}
-		if (curr_pt.y < min_pt.y)
-		{
-			min_pt.y = curr_pt.y;
-		}
-		if (curr_pt.z < min_pt.z)
-		{
-			min_pt.z = curr_pt.z;
-		}
-
-		if (curr_pt.x > max_pt.x)
-		{
-			max_pt.x = curr_pt.x;
-		}
-		if (curr_pt.y > max_pt.y)
-		{
-			max_pt.y = curr_pt.y;
-		}
-		if (curr_pt.z > max_pt.z)
-		{
-			max_pt.z = curr_pt.z;
-		}
-	}
-}*/
 
 void processMapPt(const geometry_msgs::Point &curr_pt, cv::Mat &occupied,
 				  cv::Mat &visited, cv::Mat &pt_mask, int kf_pos_grid_x, int kf_pos_grid_z)
@@ -430,12 +321,6 @@ void processMapPt(const geometry_msgs::Point &curr_pt, cv::Mat &occupied,
 	int pt_pos_grid_x = int(floor((pt_pos_x - map_lbound) * norm_factor_x));
 	int pt_pos_grid_z = int(floor((pt_pos_z - map_bbound) * norm_factor_z));
 
-	//TODO jark
-	//if(curr_pt.y > (kf_pos_y + 0.22))
-	//	return;
-	//if (pt_pos_y < (kf_pos_y - 1.2)) //高度过滤
-	//	return;
-
 	if (pt_pos_grid_x < 0 || pt_pos_grid_x >= w)
 		return;
 
@@ -445,46 +330,6 @@ void processMapPt(const geometry_msgs::Point &curr_pt, cv::Mat &occupied,
 	// Increment the occupency account of the grid cell where map point is located
 	++occupied.at<int>(pt_pos_grid_z, pt_pos_grid_x);
 	pt_mask.at<uchar>(pt_pos_grid_z, pt_pos_grid_x) = 255;
-
-	// Get all grid cell that the line between keyframe and map point pass through
-	/*int x0 = kf_pos_grid_x;
-	int y0 = kf_pos_grid_z;
-	int x1 = pt_pos_grid_x;
-	int y1 = pt_pos_grid_z;
-	bool steep = (abs(y1 - y0) > abs(x1 - x0));
-	if (steep)
-	{
-		swap(x0, y0);
-		swap(x1, y1);
-	}
-	if (x0 > x1)
-	{
-		swap(x0, x1);
-		swap(y0, y1);
-	}
-	int dx = x1 - x0;
-	int dy = abs(y1 - y0);
-	double error = 0;
-	double deltaerr = ((double)dy) / ((double)dx);
-	int y = y0;
-	int ystep = (y0 < y1) ? 1 : -1;
-	for (int x = x0; x <= x1; ++x)
-	{
-		if (steep)
-		{
-			++visited.at<int>(x, y);
-		}
-		else
-		{
-			++visited.at<int>(y, x);
-		}
-		error = error + deltaerr;
-		if (error >= 0.5)
-		{
-			y = y + ystep;
-			error = error - 1.0;
-		}
-	}*/
 
 	int x1 = kf_pos_grid_x;
 	int y1 = kf_pos_grid_z;
@@ -561,16 +406,6 @@ void processMapPts(const std::vector<geometry_msgs::Pose> &pts, unsigned int n_p
 
 void updateGridMap(const geometry_msgs::PoseArray::ConstPtr &pts_and_pose)
 {
-	// printf("updateGridMap\n");
-	//geometry_msgs::Point min_pt, max_pt;
-	//getMixMax(pts_and_pose, min_pt, max_pt);
-	// printf("max_pt: %f, %f\t min_pt: %f, %f\n", max_pt.x*scale_factor, max_pt.z*scale_factor,
-	//	min_pt.x*scale_factor, min_pt.z*scale_factor);
-
-	//double grid_res_x = max_pt.x - min_pt.x, grid_res_z = max_pt.z - min_pt.z;
-
-	// printf("Received frame %u \n", pts_and_pose->header.seq);
-
 	const geometry_msgs::Point &kf_location = pts_and_pose->poses[0].position;
 	const geometry_msgs::Quaternion &kf_orientation = pts_and_pose->poses[0].orientation;
 	vector<double> curr_pt_before = {kf_location.x, kf_location.y, kf_location.z};
@@ -578,9 +413,6 @@ void updateGridMap(const geometry_msgs::PoseArray::ConstPtr &pts_and_pose)
 	kf_pos_x = curr_pt_after[0] * scale_factor;
 	kf_pos_y = curr_pt_after[1] * scale_factor;
 	kf_pos_z = curr_pt_after[2] * scale_factor;
-
-	//kf_pos_x = kf_location.x * scale_factor;
-	//kf_pos_z = kf_location.z * scale_factor;
 
 	kf_pos_grid_x = int(floor((kf_pos_x - map_lbound) * norm_factor_x));
 	kf_pos_grid_z = int(floor((kf_pos_z - map_bbound) * norm_factor_z));
@@ -609,83 +441,20 @@ void updateGridMap(const geometry_msgs::PoseArray::ConstPtr &pts_and_pose)
 	oz = kf_orientation.z;
 	ow = kf_orientation.w;
 
-		// Eigen::Matrix3d R;
-// 	R << 
-// 	1-2*oy*oy-2*oz*oz, 	2*ox*oy+2*ow*oz, 	2*ox*oz-2*ow*oy,
-// 	2*ox*oy-2*ow*oz, 	1-2*ox*ox-2*oz*oz, 	2*oy*oz+2*ow*ox,
-// 	2*ox*oz+2*ow*oy, 	2*oy*oz-2*ow*ox, 	1-2*ox*ox-2*oy*oy;
-
-//   tf::Matrix3x3 tf_camera_rotation (R.at<float> (0,0), R.at<float> (0,1), R.at<float> (0,2),
-//                                     R.at<float> (1,0), R.at<float> (1,1), R.at<float> (1,2),
-//                                     R.at<float> (2,0), R.at<float> (2,1), R.at<float> (2,2)
-//                                    );
-//   const tf::Matrix3x3 tf_orb_to_ros (0, 0, 1,
-//                                     -1, 0, 0,
-//                                      0,-1, 0);
-
-//   //Transform from orb coordinate system to ros coordinate system on camera coordinates
-//   tf_camera_rotation = tf_orb_to_ros*tf_camera_rotation;
-// //   tf_camera_translation = tf_orb_to_ros*tf_camera_translation;
-
-//   //Inverse matrix
-//   tf_camera_rotation = tf_camera_rotation.transpose();
-// //   tf_camera_translation = -(tf_camera_rotation*tf_camera_translation);
-
-//   //Transform from orb coordinate system to ros coordinate system on map coordinates
-//   tf_camera_rotation = tf_orb_to_ros*tf_camera_rotation;
-//   tf_camera_translation = tf_orb_to_ros*tf_camera_translation;
-
-
 	Eigen::Matrix3d R;
 	R << 
 	1-2*oy*oy-2*oz*oz, 	2*ox*oy+2*ow*oz, 	2*ox*oz-2*ow*oy,
 	2*ox*oy-2*ow*oz, 	1-2*ox*ox-2*oz*oz, 	2*oy*oz+2*ow*ox,
 	2*ox*oz+2*ow*oy, 	2*oy*oz-2*ow*ox, 	1-2*ox*ox-2*oy*oy;
+
 	// // 相机坐标系 to ROS系
-
-
-
 	Eigen::Matrix3d T;
 	T <<
 	0,  0, 1,
-	0, -1, 0,
+	0, 1, 0,
 	-1, 0, 0;
 	R = T * R;
 
-	// Eigen::Matrix3d T,TR;
-	// T <<
-	// 0,  0, 1,
-	// -1, 0, 0,
-	// 0, -1, 0;
-	// R = T * R;
-	// R = R.inverse();
-	// R = T*R;
-	// TR <<
-	// 1,  0, 0,
-	// 0, 0, 1,
-	// 0, -1, 0;
-	// R=TR*R;
-
-	// kinect rgbd camera
-	T << 
-	1,  0, 0,
-	0,  0, 1,
-	0, 1, 0;	
-	R = T * R;
-		T <<
-	1,  0, 0,
-	0, 0, -1,
-	0, 1, 0;
-	R=T*R;
-
-	// T << 
-	// 0,  0, -1,
-	// 0,  1, 0,
-	// 1, 0, 0;	
-	// R = T * R;
-
-	// R = R.inverse();
-	// R = T*R;
 	// 旋转矩阵转四元数
 	Eigen::Quaterniond Q( R );
 	// 注意以xz面为地图xy平面
@@ -694,15 +463,11 @@ void updateGridMap(const geometry_msgs::PoseArray::ConstPtr &pts_and_pose)
 	curpose.pose.orientation.z = Q.y();
 	curpose.pose.orientation.w = Q.w();
 	Eigen::Vector3d rpy = R.eulerAngles(0,1,2);
-	// cout << "Euler Angles of camera pose:\n" << rpy[0]/3.14*180 << " " << rpy[1]/3.14*180 << " " << rpy[2]/3.14*180 << endl;
-	// cout << "orientation: " << curpose.pose.orientation.x << " " << curpose.pose.orientation.y << " " << curpose.pose.orientation.z << " " << curpose.pose.orientation.w << endl;
-	// pub_pose.publish( curpose );
-	
+
 	++n_kf_received;
 	unsigned int n_pts = pts_and_pose->poses.size() - 1;
 	// printf("Processing key frame %u and %u points\n",n_kf_received, n_pts);
 	processMapPts(pts_and_pose->poses, n_pts, 1, kf_pos_grid_x, kf_pos_grid_z);
-
 	getGridMap();
 }
 
@@ -719,11 +484,11 @@ void resetGridMap(const geometry_msgs::PoseArray::ConstPtr &all_kf_and_pts)
 		return;
 	}
 	printf("Resetting grid map with %d key frames\n", n_kf);
-#ifdef COMPILEDWITHC11
-	std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
-#else
-	std::chrono::monotonic_clock::time_point t1 = std::chrono::monotonic_clock::now();
-#endif
+	#ifdef COMPILEDWITHC11
+		std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
+	#else
+		std::chrono::monotonic_clock::time_point t1 = std::chrono::monotonic_clock::now();
+	#endif
 
 	kf_plantVec.clear();
 	unsigned int id = 0;
@@ -779,9 +544,6 @@ void resetGridMap(const geometry_msgs::PoseArray::ConstPtr &all_kf_and_pts)
 		float kf_pos_x = curr_pt_after[0] * scale_factor;
 		float kf_pos_z = curr_pt_after[2] * scale_factor;
 
-		//float kf_pos_x = kf_location.x * scale_factor;
-		//float kf_pos_z = kf_location.z * scale_factor;
-
 		int kf_pos_grid_x = int(floor((kf_pos_x - map_lbound) * norm_factor_x));
 		int kf_pos_grid_z = int(floor((kf_pos_z - map_bbound) * norm_factor_z));
 
@@ -801,17 +563,18 @@ void resetGridMap(const geometry_msgs::PoseArray::ConstPtr &all_kf_and_pts)
 		id += n_pts;
 	}
 
-	getGridMap();
-#ifdef COMPILEDWITHC11
-	std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
-#else
-	std::chrono::monotonic_clock::time_point t2 = std::chrono::monotonic_clock::now();
-#endif
+		getGridMap();
+		#ifdef COMPILEDWITHC11
+			std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
+		#else
+			std::chrono::monotonic_clock::time_point t2 = std::chrono::monotonic_clock::now();
+		#endif
 	double ttrack = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1).count();
 	printf("Done. Time taken: %f secs\n", ttrack);
 	pub_grid_map.publish(grid_map_msg);
 }
 }
+
 void getGridMap()
 {
 	std::lock_guard<std::mutex> lock(g_gridMapMutex);
@@ -831,14 +594,8 @@ void getGridMap()
 			{
 				//grid_map.at<float>(row, col) = 1.0 - float(occupieds / visits);
 				grid_map.at<float>(row, col) = 1.0 - (1.0 * occupieds / visits);
-
-				/*
-				if(occupieds > 12)
-					grid_map_proba.at<uchar>(row, col) = 0;
-				else
-					grid_map_proba.at<uchar>(row, col) = (uchar)(255 * (1.0 - 1.0 * occupieds / visits));
-				*/
 			}
+
 			if (grid_map.at<float>(row, col) >= free_thresh)
 			{
 				grid_map_thresh.at<uchar>(row, col) = 255;
@@ -889,26 +646,6 @@ void parseParams(int argc, char **argv)
 	}
 	if (argc > arg_id)
 	{
-		resize_factor = atof(argv[arg_id++]);
-	}
-	if (argc > arg_id)
-	{
-		cloud_max_x = atof(argv[arg_id++]);
-	}
-	if (argc > arg_id)
-	{
-		cloud_min_x = atof(argv[arg_id++]);
-	}
-	if (argc > arg_id)
-	{
-		cloud_max_z = atof(argv[arg_id++]);
-	}
-	if (argc > arg_id)
-	{
-		cloud_min_z = atof(argv[arg_id++]);
-	}
-	if (argc > arg_id)
-	{
 		free_thresh = atof(argv[arg_id++]);
 	}
 	if (argc > arg_id)
@@ -929,9 +666,6 @@ void printParams()
 {
 	printf("Using params:\n");
 	printf("scale_factor: %f\n", scale_factor);
-	printf("resize_factor: %f\n", resize_factor);
-	printf("cloud_max: %f, %f\t cloud_min: %f, %f\n", cloud_max_x, cloud_max_z, cloud_min_x, cloud_min_z);
-	//printf("cloud_min: %f, %f\n", cloud_min_x, cloud_min_z);
 	printf("free_thresh: %f\n", free_thresh);
 	printf("occupied_thresh: %f\n", occupied_thresh);
 	printf("use_local_counters: %d\n", use_local_counters);
@@ -945,7 +679,6 @@ vector<double> bestplane(3, 0);// [0]a [1]b [2]c
 PlaneFittingRansac(Vectors, bestplane);
 cout << "法向量为： x:" << bestplane[0] << " y:" << bestplane[1] << " z:" << -1 << endl;
  */
-
 void PlaneFittingRansac(vector<vector<double>> &Vectors, vector<double> &bestplane)
 {
 	if (Vectors[0].size() != 3)
@@ -959,7 +692,6 @@ void PlaneFittingRansac(vector<vector<double>> &Vectors, vector<double> &bestpla
 	for (int i = 0; i < 30; i++)
 	{
 		//步骤1：从数据中随机选择3组数据
-		//
 		set<int> s;
 		while (1)
 		{
