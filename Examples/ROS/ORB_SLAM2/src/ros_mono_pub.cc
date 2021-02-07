@@ -121,10 +121,7 @@ int main(int argc, char **argv){
 	// ros::Publisher pub_cur_camera_pose = nodeHandler.advertise<geometry_msgs::Pose>("/cur_camera_pose", 1000);
 	 ros::Publisher pub_cur_camera_pose = nodeHandler.advertise<geometry_msgs::PoseStamped>("/cur_camera_pose", 1000);
 	//Param 
-	nodeHandler.getParam("focal_len",focal_len);
-	nodeHandler.getParam("field_size",field_size);
-	nodeHandler.getParam("resolution",costcube_resolution);
-	
+
 	if (read_from_topic) {
 		ImageGrabber igb(SLAM, pub_pts_and_pose, pub_all_kf_and_pts, pub_cur_camera_pose);
 		ros::Subscriber sub = nodeHandler.subscribe(image_topic, 1, &ImageGrabber::GrabImage, &igb);
