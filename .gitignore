@@ -10,6 +10,7 @@ Examples/ROS/ORB_SLAM2/lib/
 Examples/ROS/ORB_SLAM2/results/
 Examples/ROS/ORB_SLAM2/Vocabulary/
 Examples/ROS/ORB_SLAM2/MapPointandKeyFrame.bin
+Examples/tf_ws/
 KeyFrameTrajectory.txt
 KeyFrameTrajectory*
 FrameTrajectory*
